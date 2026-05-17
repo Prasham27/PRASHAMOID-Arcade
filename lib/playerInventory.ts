@@ -17,7 +17,14 @@ export interface ConsumedEntry {
 interface PersistedShape {
   consumedHistory: ConsumedEntry[];
   trashedCount: number;
+  /** FIFO queue of the most recent items tossed into the can; oldest
+   *  fall off when this is at TRASH_QUEUE_CAP. Persisted so the visible
+   *  pile in the trash survives a page reload. */
+  recentThrown: string[];
 }
+
+/** Max wrappers visibly stacked at the top of the trash can. */
+export const TRASH_QUEUE_CAP = 6;
 
 /** Module-level handle so a fresh consume() can cancel the previous auto-clear. */
 let timeoutHandle: number | null = null;
@@ -36,6 +43,9 @@ interface PlayerInventoryState {
   consumedHistory: ConsumedEntry[];
   /** Count of wrappers/cans thrown into the trash this session. */
   trashedCount: number;
+  /** Recent wrapper IDs (newest-first) sitting in the trash can. Capped at
+   *  TRASH_QUEUE_CAP — older entries roll off when new ones arrive. */
+  recentThrown: string[];
   /** True once we've read sessionStorage. */
   hydrated: boolean;
   /**
@@ -63,6 +73,7 @@ function persist(state: PersistedShape): void {
       JSON.stringify({
         consumedHistory: state.consumedHistory.slice(0, HISTORY_CAP),
         trashedCount: state.trashedCount,
+        recentThrown: state.recentThrown.slice(0, TRASH_QUEUE_CAP),
       }),
     );
   } catch {
@@ -75,6 +86,7 @@ export const usePlayerInventory = create<PlayerInventoryState>((set, get) => ({
   consumptionId: 0,
   consumedHistory: [],
   trashedCount: 0,
+  recentThrown: [],
   hydrated: false,
 
   consume: (item) => {
@@ -88,6 +100,7 @@ export const usePlayerInventory = create<PlayerInventoryState>((set, get) => ({
       persist({
         consumedHistory: nextHistory,
         trashedCount: s.trashedCount,
+        recentThrown: s.recentThrown,
       });
       return {
         heldItem: item,
@@ -113,13 +126,20 @@ export const usePlayerInventory = create<PlayerInventoryState>((set, get) => ({
     set((s) => {
       if (!s.heldItem) return s; // nothing to throw
       const nextTrashed = s.trashedCount + 1;
+      // FIFO queue capped at TRASH_QUEUE_CAP — newest first; oldest fall off.
+      const nextRecent = [s.heldItem.id, ...s.recentThrown].slice(
+        0,
+        TRASH_QUEUE_CAP,
+      );
       persist({
         consumedHistory: s.consumedHistory,
         trashedCount: nextTrashed,
+        recentThrown: nextRecent,
       });
       return {
         heldItem: null,
         trashedCount: nextTrashed,
+        recentThrown: nextRecent,
       };
     });
   },
@@ -162,6 +182,11 @@ export function hydratePlayerInventory(): void {
         }
         if (typeof p.trashedCount === 'number' && p.trashedCount >= 0) {
           next.trashedCount = Math.floor(p.trashedCount);
+        }
+        if (Array.isArray(p.recentThrown)) {
+          next.recentThrown = (p.recentThrown as unknown[])
+            .filter((v): v is string => typeof v === 'string')
+            .slice(0, TRASH_QUEUE_CAP);
         }
         st._hydrate(next);
       }

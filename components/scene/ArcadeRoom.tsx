@@ -27,7 +27,7 @@ import {
   usePlayerInventory,
   hydratePlayerInventory,
 } from '@/lib/playerInventory';
-import type { SnackItem } from '@/lib/snack-items';
+import { snackById, type SnackItem } from '@/lib/snack-items';
 import { TrashCan } from './TrashCan';
 import { ChangingRoom } from './ChangingRoom';
 import { AvatarCustomizationModal } from './AvatarCustomizationModal';
@@ -151,12 +151,13 @@ const VENDING_STAND_Z = 0.18; // it's tall and against the wall
 const CONSUME_SPOT_X = 1340;
 const CONSUME_SPOT_Z = 0.6;
 
-const TRASH_X = 80;
-const TRASH_Y = 620;
-/** Spot just to the right of the trash can where the character stands
- *  to toss the wrapper in. */
-const TRASH_STAND_X = 150;
-const TRASH_STAND_Z = 0.85;
+// Trash moved next to the vending machine (right side) so the character
+// only has to take a short step after eating, not walk across the room.
+const TRASH_X = 1620;
+const TRASH_Y = 600;
+/** Spot just to the left of the trash can (between vending + trash). */
+const TRASH_STAND_X = 1560;
+const TRASH_STAND_Z = 0.78;
 /** How long to hold the eat/drink animation before walking to the trash.
  *  Drink tilt = 600ms; eat munch = 1500ms — wait a bit past the longer one. */
 const CONSUME_HOLD_MS = 1700;
@@ -226,6 +227,16 @@ export function ArcadeRoom({
   const charRef = useRef<PixelCharacterHandle>(null);
   const consumeItem = usePlayerInventory((s) => s.consume);
   const throwAway = usePlayerInventory((s) => s.throwAway);
+  const recentThrownIds = usePlayerInventory((s) => s.recentThrown);
+  // Resolve wrapper IDs back into SnackItem objects so TrashCan can render
+  // their handheld sprites peeking out of the can. Newest at index 0.
+  const trashedWrappers = useMemo<SnackItem[]>(
+    () =>
+      recentThrownIds
+        .map((id) => snackById(id))
+        .filter((s): s is SnackItem => s !== undefined),
+    [recentThrownIds],
+  );
   const [charX, setCharX] = useState(SCENE_WIDTH / 2);
   const [charZ, setCharZ] = useState(0.7);
   const [flashing, setFlashing] = useState(false);
@@ -622,7 +633,7 @@ export function ArcadeRoom({
       />
 
       {/* === Decorative + vending === */}
-      <TrashCan x={TRASH_X} y={TRASH_Y} />
+      <TrashCan x={TRASH_X} y={TRASH_Y} wrappers={trashedWrappers} />
       <Vendingmachine
         x={VENDING_X}
         y={VENDING_Y}

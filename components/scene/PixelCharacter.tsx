@@ -114,14 +114,14 @@ const HEAD_AND_TORSO: string[] = [
   '.....KHHHSSSSSSSSHHHK...', // 12  jaw/neck blends to hood
   // ---- TORSO/ARMS (rows 13..22, 10h) ----
   '....KHHHHHHHHHHHHHHHK...', // 13  shoulders begin
-  '...KHHHHHPPPPPPPPHHHHK..', // 14  pink hoodie drawstring across collar
+  '...KHHHHHHHHHHHHHHHHHK..', // 14  collar (plain — pink drawstring removed)
   '...KHHHHHHHHHHHHHHHHHK..', // 15
   '..KDHHHHHHHHHHHHHHHHDK..', // 16  arms add darker shading on sides
   '..KDHHHHHHHHHHHHHHHHDK..', // 17
-  '..KDHHHHHHPPPPPPHHHHDK..', // 18  pocket trim (pink, kangaroo-style)
-  '..KDHHHHHPHHHHHHPHHHDK..', // 19  pocket sides
-  '..KDHHHHHPHHHHHHPHHHDK..', // 20
-  '..KDHHHHHPPPPPPPPHHHDK..', // 21  pocket bottom
+  '..KDHHHHHHHHHHHHHHHHDK..', // 18  chest (plain — pocket trim removed)
+  '..KDHHHHHHHHHHHHHHHHDK..', // 19
+  '..KDHHHHHHHHHHHHHHHHDK..', // 20
+  '..KDHHHHHHHHHHHHHHHHDK..', // 21
   '..KDDHHHHHHHHHHHHHHDDK..', // 22  hoodie hem (bottom)
 ];
 
@@ -296,16 +296,20 @@ const HAT_OVERLAYS: Record<Exclude<HatType, 'none'>, OverlayDef> = {
 };
 
 // === GOGGLES SPRITES =======================================================
-// 14w x 4h overlays positioned across the eyes. Width was bumped from 12 → 14
-// (and offsetX from 6 → 5) so the overlay fully spans both eye columns
-// (left eye at sprite cols 7-8, right eye at sprite cols 17-18) — the old
-// 12-wide overlay was leaving the right eye's outer pixel uncovered.
+// 14w x 4h overlays positioned across the eyes. Eye positions in the base
+// sprite are: left eye at cols 7-8, right eye at cols 18-19, both on row 8.
+// With offsetX=6 and offsetY=7, the overlay spans sprite cols 6-19 and rows
+// 7-10, so overlay row 1 sits exactly on the eye row, with the left eye at
+// overlay cols 1-2 and the right eye at overlay cols 12-13. Each lens is
+// laid out to fully cover its eye columns.
 // Lens pixels are fully opaque so eyes cannot show through; additionally,
 // when goggles are equipped, buildCharacterPalette() remaps E/I to skin
 // color so any sub-pixel layering quirk still produces no visible eye.
 const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
   // Chunky steampunk-style frame (dark) with solid cyan lenses + strap bridge.
-  // Each lens is a 3x2 opaque cyan block that fully covers its eye.
+  // Left lens spans overlay cols 0-3 (covering eye cols 1-2), right lens
+  // spans overlay cols 10-13 (covering eye cols 12-13), dark bridge in cols
+  // 4-9. Top/bottom rows are full K frame.
   'pixel-goggles': {
     width: 14,
     height: 4,
@@ -318,14 +322,15 @@ const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
     },
     rows: [
       'KKKKKKKKKKKKKK',
-      'KCCCIKDDKCCCIK',
-      'KCCCCKDDKCCCCK',
+      'CCCIDDDDDDICCC',
+      'CCCCDDDDDDCCCC',
       'KKKKKKKKKKKKKK',
     ],
-    offsetX: 5,
+    offsetX: 6,
     offsetY: 7,
   },
   // Single horizontal cyan visor — fully opaque strip across both eyes.
+  // Shines placed near each eye for symmetric highlights.
   visor: {
     width: 14,
     height: 4,
@@ -337,15 +342,16 @@ const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
     },
     rows: [
       'KKKKKKKKKKKKKK',
-      'KCCCCIICCCCCCK',
-      'KCCCCCCCCCCCCK',
+      'CCICCCCCCCCICC',
+      'CCCCCCCCCCCCCC',
       'KKKKKKKKKKKKKK',
     ],
-    offsetX: 5,
+    offsetX: 6,
     offsetY: 7,
   },
   // 8-bit black shades — solid black lenses with a tiny white shine.
-  // Both lenses are now fully opaque blocks (no sub-pixel transparency).
+  // Lens K-pixels at the eye columns fully occlude the eye. Shines placed
+  // one pixel off each eye center for that classic anime-shades look.
   shades: {
     width: 14,
     height: 4,
@@ -356,11 +362,11 @@ const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
     },
     rows: [
       'KKKKKKKKKKKKKK',
-      'KKKKIKKKKIKKKK',
+      'KKIKKKKKKKKIKK',
       'KKKKKKKKKKKKKK',
-      '..K........K..',
+      '.K..........K.',
     ],
-    offsetX: 5,
+    offsetX: 6,
     offsetY: 7,
   },
 };

@@ -41,8 +41,8 @@ export interface PlayerAppearanceState {
 }
 
 const DEFAULTS = {
-  // Chill default look: black hoodie + crown + shades.
-  hoodieColor: 'black' as HoodieColor,
+  // Chill default look: red hoodie + crown + shades.
+  hoodieColor: 'red' as HoodieColor,
   hatType: 'crown' as HatType,
   gogglesType: 'shades' as GogglesType,
 };
