@@ -222,9 +222,9 @@ export function SnackVendingModal({
           })}
         </div>
 
-        {/* === Glass display window with shelves === */}
+        {/* === Glass display window with shelves (scrollable) === */}
         <div
-          className="absolute left-4 right-4 overflow-hidden border-2 border-black"
+          className="absolute left-4 right-4 overflow-y-auto overflow-x-hidden border-2 border-black"
           style={{
             top: 120,
             height: 480,
@@ -234,17 +234,20 @@ export function SnackVendingModal({
               'inset 0 0 24px 6px rgba(0,0,0,0.9)',
               'inset 0 0 30px rgba(0,240,255,0.15)',
             ].join(', '),
+            scrollbarColor: '#ff2c9f #1c0429',
+            scrollbarWidth: 'thin',
           }}
         >
-          {/* 3 shelves, each containing 4 items */}
-          {rows.map((row, ri) => (
+          {/* 3 shelves, each containing 4 items — flex column so they scroll
+              cleanly if the modal is shorter than the natural content. */}
+          {rows.map((row) => (
             <div
               key={row.tab.id}
-              className="absolute left-0 right-0"
+              className="relative w-full"
               style={{
-                top: ri * 160,
                 height: 156,
                 padding: '8px 8px 0',
+                flexShrink: 0,
               }}
             >
               {/* Shelf items */}
@@ -313,19 +316,19 @@ export function SnackVendingModal({
             </div>
           ))}
 
-          {/* Glass reflection */}
+          {/* Glass reflection — fixed inside the scroll container */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0"
+            className="pointer-events-none sticky left-0 right-0 top-0 -mt-[480px] h-[480px]"
             style={{
               background:
                 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, transparent 45%, rgba(0,240,255,0.05) 100%)',
             }}
           />
-          {/* Scanlines */}
+          {/* Scanlines — also fixed via sticky so they don't scroll with content */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0"
+            className="pointer-events-none sticky left-0 right-0 top-0 -mt-[480px] h-[480px]"
             style={{
               backgroundImage:
                 'repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0 1px, transparent 1px 3px)',

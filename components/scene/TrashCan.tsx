@@ -4,17 +4,27 @@ import type { SnackItem } from '@/lib/snack-items';
 export interface TrashCanProps {
   x: number;
   y: number;
-  /** Recent wrappers visible peeking out of the can; newest at index 0.
-   *  Capped to ~6 by the caller. */
+  /** Recent wrappers visibly stacked in the can. Newest at index 0,
+   *  oldest at the end. Caller caps to ~6. */
   wrappers?: SnackItem[];
 }
 
-/** Decorative trash can with a green slime glow. The newest wrappers
- *  (capped to ~6) are stacked visibly at the opening so the visitor
- *  can see what's been tossed. */
+/** Trash can with a green slime glow at the rim. Wrappers stack vertically
+ *  INSIDE the can — the first one thrown lands at the bottom; each new one
+ *  appears above the previous one until the queue is full and oldest rolls off. */
 export function TrashCan({ x, y, wrappers = [] }: TrashCanProps) {
   const W = 44;
   const H = 56;
+  const list = wrappers.slice(0, 6);
+  const N = list.length;
+  /** Vertical spacing between stacked wrappers, in px. Each handheld sprite
+   *  is ~17px tall at scale 1.2, so overlap is intentional for a pile look. */
+  const STACK_OFFSET = 7;
+  /** Subtle horizontal jiggle per stack layer so the pile doesn't look like
+   *  a perfect tower. Looped so longer queues stay varied. */
+  const X_OFFSETS = [0, 3, -2, 4, -3, 2];
+  const TILTS = [-8, 6, -3, 9, -6, 4];
+
   return (
     <div
       className="absolute z-20"
@@ -56,47 +66,9 @@ export function TrashCan({ x, y, wrappers = [] }: TrashCanProps) {
         }}
       />
 
-      {/* Wrappers peeking out of the top of the can.
-       *  Newest (index 0) sits on top + leftmost; older ones layer behind.
-       *  We position absolutely so they overlap slightly, giving a "pile"
-       *  look. Each wrapper has a small random-ish tilt for character. */}
+      {/* body — the can interior where wrappers stack */}
       <div
-        className="absolute left-0 right-0 z-10"
-        style={{ top: -8, height: 16 }}
-      >
-        {wrappers.slice(0, 6).map((w, i) => {
-          // 6 horizontal slots across the can width
-          const slot = i; // 0 (leftmost) → 5 (rightmost)
-          // Tilt alternates slightly so the pile has character
-          const tilts = [-12, 6, -4, 14, -8, 10];
-          const yOffsets = [0, 2, -1, 1, 3, 0];
-          const baseX = (W / 6) * slot - 4;
-          return (
-            <div
-              key={`${w.id}-${i}`}
-              className="absolute"
-              style={{
-                left: baseX,
-                top: yOffsets[i] ?? 0,
-                transform: `rotate(${tilts[i] ?? 0}deg)`,
-                transformOrigin: 'bottom center',
-                zIndex: 6 - i,
-                filter:
-                  i === 0
-                    ? `drop-shadow(0 0 6px ${w.accentColor}88)`
-                    : 'none',
-              }}
-              title={w.name}
-            >
-              <Sprite def={w.spriteHandheld} scale={1.6} />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* body — rendered below the wrapper layer */}
-      <div
-        className="absolute left-1 right-1"
+        className="absolute left-1 right-1 overflow-visible"
         style={{
           top: 6,
           bottom: 0,
@@ -107,13 +79,44 @@ export function TrashCan({ x, y, wrappers = [] }: TrashCanProps) {
             'repeating-linear-gradient(90deg, rgba(54,16,82,0.6) 0 2px, transparent 2px 5px)',
           boxShadow: '0 0 12px rgba(57,255,20,0.35)',
         }}
-      />
-      {/* slime overflow at top */}
+      >
+        {/* Stacked wrappers — oldest at bottom, newest on top.
+         *  list[0]   = newest → highest in the can (largest `bottom`)
+         *  list[N-1] = oldest → lowest in the can (`bottom: 0`)
+         *  zIndex set so the newest visually sits ON TOP of older ones. */}
+        {list.map((w, i) => {
+          const stackIndex = N - 1 - i; // 0 = oldest at the bottom
+          const isNewest = i === 0;
+          return (
+            <div
+              key={`${w.id}-${i}-${stackIndex}`}
+              className="absolute left-1/2"
+              style={{
+                bottom: stackIndex * STACK_OFFSET,
+                transform: `translateX(-50%) translateX(${X_OFFSETS[i] ?? 0}px) rotate(${TILTS[i] ?? 0}deg)`,
+                transformOrigin: 'bottom center',
+                zIndex: 10 + (N - i),
+                filter: isNewest
+                  ? `drop-shadow(0 0 6px ${w.accentColor}aa)`
+                  : `drop-shadow(0 1px 1px rgba(0,0,0,0.6))`,
+                pointerEvents: 'none',
+              }}
+              title={w.name}
+            >
+              <Sprite def={w.spriteHandheld} scale={1.2} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* slime overflow at the rim — drawn after the wrappers so the green
+       *  drip remains visible even when the pile is tall */}
       <div
-        className="absolute left-2 right-2"
+        className="pointer-events-none absolute left-2 right-2"
         style={{
           top: 6,
           height: 5,
+          zIndex: 30,
           background:
             'linear-gradient(180deg, #39ff14, rgba(57,255,20,0.6) 60%, transparent)',
           boxShadow: '0 0 10px #39ff14, 0 0 18px #39ff1466',
