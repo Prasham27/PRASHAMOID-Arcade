@@ -46,7 +46,9 @@ export const ACHIEVEMENTS: Record<AchievementId, Achievement> = {
 };
 
 export const STORAGE_KEY = 'arcade.achievements';
-export const CABINETS_VISITED_KEY = 'arcade.visited';
+// Bumped from 'arcade.visited' → '.v2' after renaming SectionId values
+// (old stored ids like 'about' would never satisfy the new schema).
+export const CABINETS_VISITED_KEY = 'arcade.visited.v2';
 
 export function readUnlocked(): Set<AchievementId> {
   if (typeof window === 'undefined') return new Set();

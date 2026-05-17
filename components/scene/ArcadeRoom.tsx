@@ -9,7 +9,11 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { SceneBackground } from './SceneBackground';
+import {
+  SceneBackground,
+  type CeilingLampCfg,
+  type FloorGlow,
+} from './SceneBackground';
 import { SceneCabinet, type CabinetAccent } from './SceneCabinet';
 import {
   PixelCharacter,
@@ -18,6 +22,10 @@ import {
 import { NeonSign } from './NeonSign';
 import { Vendingmachine } from './Vendingmachine';
 import { TrashCan } from './TrashCan';
+import { ExitDoor } from './ExitDoor';
+import { Poster } from './Poster';
+import { SynthwaveWindow } from './SynthwaveWindow';
+import { PinballMachine } from './PinballMachine';
 import { PlayerCard } from './PlayerCard';
 import { HighScoresCard } from './HighScoresCard';
 import { AchievementsCard } from './AchievementsCard';
@@ -32,19 +40,21 @@ import {
   SkillsArt,
 } from './CabinetScreenArt';
 
-export const SCENE_WIDTH = 1400;
+export const SCENE_WIDTH = 1900;
 export const SCENE_HEIGHT = 800;
 const FLOOR_Y = 470;
-const PROXIMITY_PX = 80;
-const CHARACTER_Y = SCENE_HEIGHT - 130;
+const PROXIMITY_PX = 90;
+/** Depth bounds for the character's stage. */
+const BACK_Y = 478; // foot-y at z=0 (just below the cabinet bases)
+const FRONT_Y = 720; // foot-y at z=1 (in front of the stage)
 const CHAR_SCALE = 3;
 
 export type SectionId =
-  | 'about'
-  | 'projects'
-  | 'experience'
-  | 'skills'
-  | 'contact';
+  | 'player'
+  | 'games'
+  | 'levels'
+  | 'inventory'
+  | 'comms';
 
 interface SectionCabinetCfg {
   id: SectionId;
@@ -67,59 +77,81 @@ const ACCENT_HEX: Record<CabinetAccent, string> = {
 
 export const SECTION_CABINETS: SectionCabinetCfg[] = [
   {
-    id: 'about',
-    label: 'ABOUT ME',
+    id: 'player',
+    label: 'PLAYER 1',
     accent: 'pink',
     route: '/overview',
-    x: 220,
+    x: 470,
     screenArt: <AboutMeArt />,
     accentHex: ACCENT_HEX.pink,
   },
   {
-    id: 'projects',
-    label: 'PROJECTS',
+    id: 'games',
+    label: 'GAMES',
     accent: 'cyan',
     route: '/projects',
-    x: 460,
+    x: 670,
     screenArt: <ProjectsArt />,
     accentHex: ACCENT_HEX.cyan,
   },
   {
-    id: 'experience',
-    label: 'EXPERIENCE',
+    id: 'levels',
+    label: 'LEVELS',
     accent: 'yellow',
     route: '/levels',
-    x: 700,
+    x: 870,
     screenArt: <ExperienceArt />,
     accentHex: ACCENT_HEX.yellow,
   },
   {
-    id: 'skills',
-    label: 'SKILLS',
+    id: 'inventory',
+    label: 'INVENTORY',
     accent: 'green',
     route: '/inventory',
-    x: 940,
+    x: 1070,
     screenArt: <SkillsArt />,
     accentHex: ACCENT_HEX.green,
   },
   {
-    id: 'contact',
-    label: 'CONTACT',
+    id: 'comms',
+    label: 'COMMS',
     accent: 'pink',
     route: '/comms',
-    x: 1180,
+    x: 1270,
     screenArt: <ContactArt />,
     accentHex: ACCENT_HEX.pink,
   },
 ];
 
 const CABINET_Y = 230;
-const PLAY_X = 150;
+/** Standing-z at which the character "is at" a back-wall cabinet. */
+const CABINET_STAND_Z = 0.14;
+/** Proximity for back-wall cabinets — must also be close to the wall. */
+const BACK_WALL_MAX_Z = 0.34;
+
+// Floor-positioned props
+const PLAY_X = 200;
 const PLAY_Y = 550;
-const VENDING_X = 1320;
+const PLAY_STAND_Z = 0.55;
+
+const VENDING_X = 1490;
 const VENDING_Y = 350;
+const VENDING_STAND_Z = 0.18; // it's tall and against the wall
+
 const TRASH_X = 80;
 const TRASH_Y = 620;
+
+// Decorative wing props (no hotspots)
+// Door body top sits at EXIT_DOOR_Y; body is 240px tall → bottom = 470 (floor).
+// The EMERGENCY EXIT neon sign sits 28px above the body, near the ceiling.
+const EXIT_DOOR_X = 30;
+const EXIT_DOOR_Y = 230;
+const POSTER_X = 170;
+const POSTER_Y = 250;
+const WINDOW_X = 1640;
+const WINDOW_Y = 180; // 180–300 on the wall, well above the pinball top
+const PINBALL_X = 1700;
+const PINBALL_Y = 360; // top of back-glass at 360, base at 620 (on the floor)
 
 export interface ArcadeRoomProps {
   /** Section cabinets to render (defaults to SECTION_CABINETS). */
@@ -131,9 +163,26 @@ export interface ArcadeRoomProps {
 }
 
 type Hotspot =
-  | { kind: 'section'; id: SectionId; route: string; x: number }
-  | { kind: 'play'; x: number }
-  | { kind: 'vending'; x: number };
+  | {
+      kind: 'section';
+      id: SectionId;
+      route: string;
+      x: number;
+      standZ: number;
+      maxZ: number;
+    }
+  | {
+      kind: 'play';
+      x: number;
+      standZ: number;
+      maxZ: number;
+    }
+  | {
+      kind: 'vending';
+      x: number;
+      standZ: number;
+      maxZ: number;
+    };
 
 /** The composed immersive arcade scene. */
 export function ArcadeRoom({
@@ -143,7 +192,8 @@ export function ArcadeRoom({
 }: ArcadeRoomProps) {
   const router = useRouter();
   const charRef = useRef<PixelCharacterHandle>(null);
-  const [charX, setCharX] = useState(700);
+  const [charX, setCharX] = useState(SCENE_WIDTH / 2);
+  const [charZ, setCharZ] = useState(0.7);
   const [flashing, setFlashing] = useState(false);
   const busyRef = useRef(false);
 
@@ -156,27 +206,47 @@ export function ArcadeRoom({
             id: c.id,
             route: c.route,
             x: c.x,
+            standZ: CABINET_STAND_Z,
+            maxZ: BACK_WALL_MAX_Z,
           }) as Hotspot,
       ),
-      { kind: 'play', x: PLAY_X },
-      { kind: 'vending', x: VENDING_X },
+      {
+        kind: 'play',
+        x: PLAY_X,
+        standZ: PLAY_STAND_Z,
+        maxZ: 0.85,
+      },
+      {
+        kind: 'vending',
+        x: VENDING_X,
+        standZ: VENDING_STAND_Z,
+        maxZ: BACK_WALL_MAX_Z,
+      },
     ],
     [cabinets],
   );
 
-  /** Returns the closest hotspot within PROXIMITY_PX, else null. */
+  /** Returns the closest hotspot that the character is actually next to
+   *  (in BOTH x and z). */
   const activeHotspot = useMemo<Hotspot | null>(() => {
     let best: Hotspot | null = null;
     let bestD = PROXIMITY_PX;
     for (const h of hotspots) {
-      const d = Math.abs(h.x - charX);
-      if (d < bestD) {
-        bestD = d;
+      const dx = Math.abs(h.x - charX);
+      if (dx >= PROXIMITY_PX) continue;
+      // Z-axis gate: depending on prop type
+      if (h.kind === 'play') {
+        if (Math.abs(charZ - h.standZ) > 0.32) continue;
+      } else {
+        if (charZ > h.maxZ) continue;
+      }
+      if (dx < bestD) {
+        bestD = dx;
         best = h;
       }
     }
     return best;
-  }, [hotspots, charX]);
+  }, [hotspots, charX, charZ]);
 
   const flashAndGo = useCallback((after: () => void) => {
     if (busyRef.current) return;
@@ -205,7 +275,10 @@ export function ArcadeRoom({
     async (h: Hotspot) => {
       if (busyRef.current) return;
       try {
-        await charRef.current?.walkTo(h.x);
+        // Walk to (x, standZ) in one promise; PixelCharacter handles
+        // both axes simultaneously, then resolves once both are within
+        // arrival tolerance.
+        await charRef.current?.walkTo(h.x, h.standZ);
       } catch {
         /* interrupted by keyboard */
       }
@@ -246,6 +319,50 @@ export function ArcadeRoom({
     [],
   );
 
+  // Position-update callback (memoized to avoid re-creating PixelCharacter deps)
+  const onCharMove = useCallback((nx: number, nz: number) => {
+    setCharX(nx);
+    setCharZ(nz);
+  }, []);
+
+  // === Background config — lamps spread across the wider room
+  const ceilingLamps: CeilingLampCfg[] = useMemo(
+    () => [
+      { x: 130, cableLen: 70, color: '#ffb8c2', glow: 'rgba(255,80,100,0.4)' }, // over exit door
+      { x: 470, cableLen: 60 },
+      { x: 770, cableLen: 78 },
+      { x: 1070, cableLen: 60 },
+      { x: 1370, cableLen: 60 },
+      { x: 1720, cableLen: 72, color: '#a5d8ff', glow: 'rgba(80,160,255,0.4)' }, // over window/pinball
+    ],
+    [],
+  );
+
+  const floorGlows: FloorGlow[] = useMemo(
+    () => [
+      // Cabinet color leaks (driven by SECTION_CABINETS positions)
+      { x: 60, rgb: '255,51,68', intensity: 0.32, width: 220 }, // exit door red
+      ...cabinets.map((c) => {
+        const accentRgb: Record<CabinetAccent, string> = {
+          pink: '255,44,159',
+          cyan: '0,240,255',
+          yellow: '255,230,0',
+          green: '57,255,20',
+        };
+        return {
+          x: c.x,
+          rgb: accentRgb[c.accent],
+          intensity: c.accent === 'yellow' || c.accent === 'green' ? 0.3 : 0.35,
+        };
+      }),
+      { x: PLAY_X, rgb: '255,44,159', intensity: 0.25, width: 160 },
+      { x: VENDING_X, rgb: '255,230,0', intensity: 0.32 },
+      { x: 1750, rgb: '0,160,255', intensity: 0.3, width: 240 }, // window blue glow
+      { x: PINBALL_X + 65, rgb: '255,44,159', intensity: 0.25, width: 170 },
+    ],
+    [cabinets],
+  );
+
   return (
     <div
       className="relative mx-auto overflow-hidden"
@@ -259,6 +376,8 @@ export function ArcadeRoom({
         width={SCENE_WIDTH}
         height={SCENE_HEIGHT}
         floorY={FLOOR_Y}
+        ceilingLamps={ceilingLamps}
+        floorGlows={floorGlows}
       />
 
       {/* === Top marquees === */}
@@ -342,6 +461,14 @@ export function ArcadeRoom({
         <NeonSign text="EXIT →" color="green" size="sm" />
       </div>
 
+      {/* === Left wing — decorative === */}
+      <ExitDoor x={EXIT_DOOR_X} y={EXIT_DOOR_Y} />
+      <Poster x={POSTER_X} y={POSTER_Y} variant="spaceship" />
+
+      {/* === Right wing — decorative === */}
+      <SynthwaveWindow x={WINDOW_X} y={WINDOW_Y} />
+      <PinballMachine x={PINBALL_X} y={PINBALL_Y} />
+
       {/* === Section cabinets (back wall) === */}
       {cabinets.map((c) => {
         const isActive =
@@ -364,6 +491,8 @@ export function ArcadeRoom({
                 id: c.id,
                 route: c.route,
                 x: c.x,
+                standZ: CABINET_STAND_Z,
+                maxZ: BACK_WALL_MAX_Z,
               })
             }
             active={isActive}
@@ -381,7 +510,12 @@ export function ArcadeRoom({
         accentSecondary="cyan"
         screenFrames={playFrames}
         onActivate={() =>
-          handleClickHotspot({ kind: 'play', x: PLAY_X })
+          handleClickHotspot({
+            kind: 'play',
+            x: PLAY_X,
+            standZ: PLAY_STAND_Z,
+            maxZ: 0.85,
+          })
         }
         active={activeHotspot?.kind === 'play'}
         withStool={false}
@@ -396,25 +530,32 @@ export function ArcadeRoom({
         y={VENDING_Y}
         active={activeHotspot?.kind === 'vending'}
         onActivate={() =>
-          handleClickHotspot({ kind: 'vending', x: VENDING_X })
+          handleClickHotspot({
+            kind: 'vending',
+            x: VENDING_X,
+            standZ: VENDING_STAND_Z,
+            maxZ: BACK_WALL_MAX_Z,
+          })
         }
       />
 
       {/* === Pixel character === */}
       <PixelCharacter
         ref={charRef}
-        initialX={700}
-        y={CHARACTER_Y}
+        initialX={SCENE_WIDTH / 2}
+        initialZ={0.7}
+        backY={BACK_Y}
+        frontY={FRONT_Y}
         minX={50}
         maxX={SCENE_WIDTH - 50}
         scale={CHAR_SCALE}
-        onPositionChange={setCharX}
+        onPositionChange={onCharMove}
         reduced={reduced}
       />
 
       {/* === Inline HUD: controls hint === */}
       <div className="absolute left-4 bottom-3 z-40 border-2 border-border bg-bg-2/85 px-3 py-1 font-pixel text-[9px] tracking-widest text-text-dim">
-        ← → / A D — WALK · [E] ENTER · CLICK CABINET
+        ← → ↑ ↓ / WASD — WALK · [E] ENTER · CLICK CABINET
       </div>
 
       {/* === Click-to-flash overlay === */}

@@ -1,11 +1,30 @@
-export interface SceneBackgroundProps {
-  width: number;
-  height: number;
-  /** Y-coordinate where the floor begins (back wall ends). */
-  floorY: number;
+export interface FloorGlow {
+  /** Center-x of the glow puddle on the floor (scene coords). */
+  x: number;
+  /** RGB triplet for the glow tint, e.g. "255,44,159". */
+  rgb: string;
+  /** Optional intensity 0..1, default 0.35. */
+  intensity?: number;
+  /** Optional puddle width override, default 180. */
+  width?: number;
 }
 
-interface Poster {
+export interface CeilingLampCfg {
+  /** Center-x of the lamp + cone. */
+  x: number;
+  /** Top-y where the cable starts. Defaults to 0. */
+  topY?: number;
+  /** Cable length in px. Defaults 60. */
+  cableLen?: number;
+  /** Lamp tint, defaults warm yellow-white. */
+  color?: string;
+  /** Halo glow rgba, defaults warm yellow. */
+  glow?: string;
+  /** Cone width in px. Defaults 180. */
+  coneWidth?: number;
+}
+
+export interface WallPosterCfg {
   x: number;
   y: number;
   color: string;
@@ -14,18 +33,26 @@ interface Poster {
   sub?: string;
 }
 
-interface CeilingLamp {
-  /** Center-x of the lamp + cone */
-  x: number;
-  /** Top-y where the cable starts */
-  topY: number;
-  /** Cable length in px */
-  cableLen: number;
-  color: string;
-  glow: string;
+export interface SceneBackgroundProps {
+  width: number;
+  height: number;
+  /** Y-coordinate where the floor begins (back wall ends). */
+  floorY: number;
+  /** Floor-glow puddles bleeding from cabinets/props. */
+  floorGlows?: FloorGlow[];
+  /** Ceiling lamps with cones (over cabinets + wing props). */
+  ceilingLamps?: CeilingLampCfg[];
+  /** Wall posters (the small in-background ones — not the wing Poster comp). */
+  wallPosters?: WallPosterCfg[];
 }
 
-const POSTERS: Poster[] = [
+const DEFAULT_LAMPS: CeilingLampCfg[] = [
+  { x: 320 },
+  { x: 700, cableLen: 78 },
+  { x: 1080 },
+];
+
+const DEFAULT_POSTERS: WallPosterCfg[] = [
   {
     x: 340,
     y: 138,
@@ -44,28 +71,12 @@ const POSTERS: Poster[] = [
   },
 ];
 
-const CEILING_LAMPS: CeilingLamp[] = [
-  {
-    x: 320,
-    topY: 0,
-    cableLen: 60,
-    color: '#ffe9a5',
-    glow: 'rgba(255,233,165,0.55)',
-  },
-  {
-    x: 700,
-    topY: 0,
-    cableLen: 78,
-    color: '#ffe9a5',
-    glow: 'rgba(255,233,165,0.55)',
-  },
-  {
-    x: 1080,
-    topY: 0,
-    cableLen: 60,
-    color: '#ffe9a5',
-    glow: 'rgba(255,233,165,0.55)',
-  },
+const DEFAULT_FLOOR_GLOWS: FloorGlow[] = [
+  { x: 220, rgb: '255,44,159' },
+  { x: 460, rgb: '0,240,255' },
+  { x: 700, rgb: '255,230,0', intensity: 0.3 },
+  { x: 940, rgb: '57,255,20', intensity: 0.3 },
+  { x: 1180, rgb: '255,44,159' },
 ];
 
 // Brick grid sizing
@@ -87,6 +98,9 @@ export function SceneBackground({
   width,
   height,
   floorY,
+  floorGlows = DEFAULT_FLOOR_GLOWS,
+  ceilingLamps = DEFAULT_LAMPS,
+  wallPosters = DEFAULT_POSTERS,
 }: SceneBackgroundProps) {
   // Compute brick rows
   const wallRowCount = Math.ceil(floorY / BRICK_H) + 1;
@@ -189,66 +203,73 @@ export function SceneBackground({
       ))}
 
       {/* Hanging ceiling lamps with cones of warm light */}
-      {CEILING_LAMPS.map((lamp, i) => (
-        <div key={`lamp-${i}`}>
-          {/* Cable */}
-          <div
-            className="absolute"
-            style={{
-              left: lamp.x - 1,
-              top: lamp.topY,
-              width: 2,
-              height: lamp.cableLen,
-              background: '#1a0a2a',
-            }}
-          />
-          {/* Lamp cap */}
-          <div
-            className="absolute"
-            style={{
-              left: lamp.x - 14,
-              top: lamp.topY + lamp.cableLen,
-              width: 28,
-              height: 10,
-              background: 'linear-gradient(180deg, #2a1448, #150726)',
-              borderRadius: '4px 4px 0 0',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
-            }}
-          />
-          {/* Bulb */}
-          <div
-            className="absolute rounded-full"
-            style={{
-              left: lamp.x - 6,
-              top: lamp.topY + lamp.cableLen + 8,
-              width: 12,
-              height: 12,
-              background: `radial-gradient(closest-side, ${lamp.color}, #6b4a14 80%)`,
-              boxShadow: `0 0 14px ${lamp.color}, 0 0 32px ${lamp.glow}`,
-            }}
-          />
-          {/* Light cone — trapezoidal warm fill */}
-          <div
-            className="absolute"
-            style={{
-              left: lamp.x - 90,
-              top: lamp.topY + lamp.cableLen + 18,
-              width: 180,
-              height: floorY - (lamp.topY + lamp.cableLen + 18) + 40,
-              background: `radial-gradient(ellipse at top, ${lamp.glow} 0%, transparent 70%)`,
-              clipPath:
-                'polygon(42% 0, 58% 0, 100% 100%, 0 100%)',
-              opacity: 0.55,
-              mixBlendMode: 'screen',
-            }}
-          />
-        </div>
-      ))}
+      {ceilingLamps.map((lamp, i) => {
+        const topY = lamp.topY ?? 0;
+        const cableLen = lamp.cableLen ?? 60;
+        const color = lamp.color ?? '#ffe9a5';
+        const glow = lamp.glow ?? 'rgba(255,233,165,0.55)';
+        const coneW = lamp.coneWidth ?? 180;
+        return (
+          <div key={`lamp-${i}`}>
+            {/* Cable */}
+            <div
+              className="absolute"
+              style={{
+                left: lamp.x - 1,
+                top: topY,
+                width: 2,
+                height: cableLen,
+                background: '#1a0a2a',
+              }}
+            />
+            {/* Lamp cap */}
+            <div
+              className="absolute"
+              style={{
+                left: lamp.x - 14,
+                top: topY + cableLen,
+                width: 28,
+                height: 10,
+                background: 'linear-gradient(180deg, #2a1448, #150726)',
+                borderRadius: '4px 4px 0 0',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+              }}
+            />
+            {/* Bulb */}
+            <div
+              className="absolute rounded-full"
+              style={{
+                left: lamp.x - 6,
+                top: topY + cableLen + 8,
+                width: 12,
+                height: 12,
+                background: `radial-gradient(closest-side, ${color}, #6b4a14 80%)`,
+                boxShadow: `0 0 14px ${color}, 0 0 32px ${glow}`,
+              }}
+            />
+            {/* Light cone — trapezoidal warm fill */}
+            <div
+              className="absolute"
+              style={{
+                left: lamp.x - coneW / 2,
+                top: topY + cableLen + 18,
+                width: coneW,
+                height: floorY - (topY + cableLen + 18) + 40,
+                background: `radial-gradient(ellipse at top, ${glow} 0%, transparent 70%)`,
+                clipPath:
+                  'polygon(42% 0, 58% 0, 100% 100%, 0 100%)',
+                opacity: 0.55,
+                mixBlendMode: 'screen',
+              }}
+            />
+          </div>
+        );
+      })}
 
       {/* Wall posters */}
-      {POSTERS.map((p) => (
+      {wallPosters.map((p) => (
         <div
-          key={p.title}
+          key={`${p.title}-${p.x}`}
           className="absolute border-2 bg-bg-2/85 px-2 py-1 text-center font-pixel"
           style={{
             left: p.x,
@@ -348,66 +369,24 @@ export function SceneBackground({
       </div>
 
       {/* Floor glow puddles (cabinet color reflections leaking down) */}
-      <div
-        className="absolute rounded-full"
-        style={{
-          left: 220 - 90,
-          top: floorY + 8,
-          width: 180,
-          height: 40,
-          background:
-            'radial-gradient(closest-side, rgba(255,44,159,0.35), transparent 70%)',
-          filter: 'blur(8px)',
-        }}
-      />
-      <div
-        className="absolute rounded-full"
-        style={{
-          left: 460 - 90,
-          top: floorY + 8,
-          width: 180,
-          height: 40,
-          background:
-            'radial-gradient(closest-side, rgba(0,240,255,0.35), transparent 70%)',
-          filter: 'blur(8px)',
-        }}
-      />
-      <div
-        className="absolute rounded-full"
-        style={{
-          left: 700 - 90,
-          top: floorY + 8,
-          width: 180,
-          height: 40,
-          background:
-            'radial-gradient(closest-side, rgba(255,230,0,0.3), transparent 70%)',
-          filter: 'blur(8px)',
-        }}
-      />
-      <div
-        className="absolute rounded-full"
-        style={{
-          left: 940 - 90,
-          top: floorY + 8,
-          width: 180,
-          height: 40,
-          background:
-            'radial-gradient(closest-side, rgba(57,255,20,0.3), transparent 70%)',
-          filter: 'blur(8px)',
-        }}
-      />
-      <div
-        className="absolute rounded-full"
-        style={{
-          left: 1180 - 90,
-          top: floorY + 8,
-          width: 180,
-          height: 40,
-          background:
-            'radial-gradient(closest-side, rgba(255,44,159,0.35), transparent 70%)',
-          filter: 'blur(8px)',
-        }}
-      />
+      {floorGlows.map((g, i) => {
+        const intensity = g.intensity ?? 0.35;
+        const w = g.width ?? 180;
+        return (
+          <div
+            key={`glow-${i}`}
+            className="absolute rounded-full"
+            style={{
+              left: g.x - w / 2,
+              top: floorY + 8,
+              width: w,
+              height: 40,
+              background: `radial-gradient(closest-side, rgba(${g.rgb},${intensity}), transparent 70%)`,
+              filter: 'blur(8px)',
+            }}
+          />
+        );
+      })}
 
       {/* PRESS START doormat at front-center */}
       <div

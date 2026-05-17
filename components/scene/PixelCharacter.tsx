@@ -118,32 +118,59 @@ const SPRITE_B: SpriteDef = {
 };
 
 export interface PixelCharacterHandle {
-  /** Walk to a target world-x; returns once arrived. */
-  walkTo: (targetX: number) => Promise<void>;
+  /** Walk to a target (world-x, depth-z). Resolves once both axes are within tolerance.
+   *  If z is omitted, the current z is preserved. */
+  walkTo: (targetX: number, targetZ?: number) => Promise<void>;
   getX: () => number;
+  getZ: () => number;
 }
 
 export interface PixelCharacterProps {
   /** Initial world-x in scene coordinates. */
   initialX: number;
-  /** Y position (top-left of sprite in scene coordinates). */
-  y: number;
-  /** Scene min/max bounds for horizontal movement. */
+  /** Initial depth z in [0..1]. 0 = back wall, 1 = front of stage. */
+  initialZ?: number;
+  /** Y-pixel of the floor at z=0 (back wall foot). */
+  backY: number;
+  /** Y-pixel of the floor at z=1 (front of stage). */
+  frontY: number;
+  /** Scene min/max bounds for horizontal movement (world-x). */
   minX: number;
   maxX: number;
-  /** Sprite scale (pixel cell size). */
+  /** Min/max depth z. Defaults [0, 1]. */
+  minZ?: number;
+  maxZ?: number;
+  /** Base sprite scale at z=1 (the "front" full-size scale). */
   scale?: number;
+  /** Scale factor at z=0 (back). Default 0.62. */
+  backScaleFactor?: number;
   /** Whether arrow keys/WASD should drive the character. */
   inputEnabled?: boolean;
-  /** Notified each frame with the current x. Used for proximity highlight. */
-  onPositionChange?: (x: number) => void;
+  /** Notified each frame with the current (x, z). Used for proximity highlight. */
+  onPositionChange?: (x: number, z: number) => void;
   /** Reduced motion → use static frame, no walk cycle. */
   reduced?: boolean;
 }
 
-const SPEED = 240; // px / sec
-const ACCEL = 1400;
-const FRICTION = 1100;
+// Horizontal movement
+const SPEED_X = 240; // px / sec — top horizontal speed
+const ACCEL_X = 1400;
+const FRICTION_X = 1100;
+
+// Depth movement. z is normalized 0..1 but conceptually maps to ~400px of
+// screen-y travel, so vz limits feel comparable to x speeds.
+const Z_TRAVEL_PX = 400; // visual screen-y span of full z=0..1 traversal
+const SPEED_VZ_PX = 180; // px-per-sec of screen-y travel along z
+const SPEED_Z = SPEED_VZ_PX / Z_TRAVEL_PX; // → z-units / sec
+const ACCEL_Z = 1100 / Z_TRAVEL_PX;
+const FRICTION_Z = 900 / Z_TRAVEL_PX;
+
+const ARRIVAL_X = 4;
+const ARRIVAL_Z = 0.012; // ~4.8 px at Z_TRAVEL_PX=400
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
 
 export const PixelCharacter = forwardRef<
   PixelCharacterHandle,
@@ -151,10 +178,15 @@ export const PixelCharacter = forwardRef<
 >(function PixelCharacter(
   {
     initialX,
-    y,
+    initialZ = 0.5,
+    backY,
+    frontY,
     minX,
     maxX,
+    minZ = 0,
+    maxZ = 1,
     scale = 3,
+    backScaleFactor = 0.62,
     inputEnabled = true,
     onPositionChange,
     reduced = false,
@@ -162,27 +194,46 @@ export const PixelCharacter = forwardRef<
   ref,
 ) {
   const [x, setX] = useState(initialX);
+  const [z, setZ] = useState(initialZ);
   const [frame, setFrame] = useState<0 | 1>(0);
   const [facing, setFacing] = useState<'left' | 'right'>('right');
   const xRef = useRef(initialX);
-  const vRef = useRef(0);
-  const targetRef = useRef<{ x: number; resolve: () => void } | null>(null);
-  const inputRef = useRef<{ left: boolean; right: boolean }>({
+  const zRef = useRef(initialZ);
+  const vxRef = useRef(0);
+  const vzRef = useRef(0);
+  const targetRef = useRef<{
+    x: number;
+    z: number;
+    resolve: () => void;
+  } | null>(null);
+  const inputRef = useRef<{
+    left: boolean;
+    right: boolean;
+    up: boolean;
+    down: boolean;
+  }>({
     left: false,
     right: false,
+    up: false,
+    down: false,
   });
   const lastFrameAt = useRef(0);
   const rafRef = useRef<number | null>(null);
 
   useImperativeHandle(ref, () => ({
-    walkTo(targetX: number) {
-      const clamped = Math.max(minX, Math.min(maxX, targetX));
+    walkTo(targetX: number, targetZ?: number) {
+      const cx = Math.max(minX, Math.min(maxX, targetX));
+      const cz = Math.max(
+        minZ,
+        Math.min(maxZ, targetZ ?? zRef.current),
+      );
       return new Promise<void>((resolve) => {
         if (targetRef.current) targetRef.current.resolve();
-        targetRef.current = { x: clamped, resolve };
+        targetRef.current = { x: cx, z: cz, resolve };
       });
     },
     getX: () => xRef.current,
+    getZ: () => zRef.current,
   }));
 
   useEffect(() => {
@@ -197,23 +248,40 @@ export const PixelCharacter = forwardRef<
         el.isContentEditable
       );
     };
+    const cancelTarget = () => {
+      if (targetRef.current) {
+        const r = targetRef.current.resolve;
+        targetRef.current = null;
+        r();
+      }
+    };
     const down = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
-      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      const k = e.key;
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') {
         inputRef.current.left = true;
-        targetRef.current?.resolve();
-        targetRef.current = null;
-      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        cancelTarget();
+      } else if (k === 'ArrowRight' || k === 'd' || k === 'D') {
         inputRef.current.right = true;
-        targetRef.current?.resolve();
-        targetRef.current = null;
+        cancelTarget();
+      } else if (k === 'ArrowUp' || k === 'w' || k === 'W') {
+        inputRef.current.up = true;
+        cancelTarget();
+      } else if (k === 'ArrowDown' || k === 's' || k === 'S') {
+        inputRef.current.down = true;
+        cancelTarget();
       }
     };
     const up = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A')
+      const k = e.key;
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A')
         inputRef.current.left = false;
-      else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D')
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D')
         inputRef.current.right = false;
+      else if (k === 'ArrowUp' || k === 'w' || k === 'W')
+        inputRef.current.up = false;
+      else if (k === 'ArrowDown' || k === 's' || k === 'S')
+        inputRef.current.down = false;
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -228,53 +296,92 @@ export const PixelCharacter = forwardRef<
     const tick = (t: number) => {
       const dt = Math.min(0.05, (t - last) / 1000);
       last = t;
-      let v = vRef.current;
+      let vx = vxRef.current;
+      let vz = vzRef.current;
       const inp = inputRef.current;
       const tgt = targetRef.current;
 
-      let dir = 0;
+      let dirX = 0;
+      let dirZ = 0;
       if (tgt) {
-        const delta = tgt.x - xRef.current;
-        if (Math.abs(delta) < 3) {
+        const dx = tgt.x - xRef.current;
+        const dz = tgt.z - zRef.current;
+        const arrivedX = Math.abs(dx) < ARRIVAL_X;
+        const arrivedZ = Math.abs(dz) < ARRIVAL_Z;
+        if (arrivedX && arrivedZ) {
           xRef.current = tgt.x;
-          v = 0;
+          zRef.current = tgt.z;
+          vx = 0;
+          vz = 0;
           const r = tgt.resolve;
           targetRef.current = null;
           r();
         } else {
-          dir = delta > 0 ? 1 : -1;
+          if (!arrivedX) dirX = dx > 0 ? 1 : -1;
+          if (!arrivedZ) dirZ = dz > 0 ? 1 : -1;
         }
       } else {
-        if (inp.left && !inp.right) dir = -1;
-        else if (inp.right && !inp.left) dir = 1;
+        if (inp.left && !inp.right) dirX = -1;
+        else if (inp.right && !inp.left) dirX = 1;
+        if (inp.up && !inp.down) dirZ = -1;
+        else if (inp.down && !inp.up) dirZ = 1;
       }
 
-      if (dir !== 0) {
-        v += dir * ACCEL * dt;
-        if (v > SPEED) v = SPEED;
-        if (v < -SPEED) v = -SPEED;
-        setFacing(dir > 0 ? 'right' : 'left');
+      // X axis dynamics
+      if (dirX !== 0) {
+        vx += dirX * ACCEL_X * dt;
+        if (vx > SPEED_X) vx = SPEED_X;
+        if (vx < -SPEED_X) vx = -SPEED_X;
+        setFacing(dirX > 0 ? 'right' : 'left');
       } else {
-        if (v > 0) v = Math.max(0, v - FRICTION * dt);
-        else if (v < 0) v = Math.min(0, v + FRICTION * dt);
+        if (vx > 0) vx = Math.max(0, vx - FRICTION_X * dt);
+        else if (vx < 0) vx = Math.min(0, vx + FRICTION_X * dt);
       }
-      vRef.current = v;
 
-      let nx = xRef.current + v * dt;
+      // Z axis dynamics (slightly weightier)
+      if (dirZ !== 0) {
+        vz += dirZ * ACCEL_Z * dt;
+        if (vz > SPEED_Z) vz = SPEED_Z;
+        if (vz < -SPEED_Z) vz = -SPEED_Z;
+      } else {
+        if (vz > 0) vz = Math.max(0, vz - FRICTION_Z * dt);
+        else if (vz < 0) vz = Math.min(0, vz + FRICTION_Z * dt);
+      }
+
+      vxRef.current = vx;
+      vzRef.current = vz;
+
+      let nx = xRef.current + vx * dt;
       if (nx < minX) {
         nx = minX;
-        v = 0;
-        vRef.current = 0;
+        vx = 0;
+        vxRef.current = 0;
       } else if (nx > maxX) {
         nx = maxX;
-        v = 0;
-        vRef.current = 0;
+        vx = 0;
+        vxRef.current = 0;
       }
       xRef.current = nx;
-      setX(nx);
-      onPositionChange?.(nx);
 
-      if (!reduced && Math.abs(v) > 20) {
+      let nz = zRef.current + vz * dt;
+      if (nz < minZ) {
+        nz = minZ;
+        vz = 0;
+        vzRef.current = 0;
+      } else if (nz > maxZ) {
+        nz = maxZ;
+        vz = 0;
+        vzRef.current = 0;
+      }
+      zRef.current = nz;
+
+      setX(nx);
+      setZ(nz);
+      onPositionChange?.(nx, nz);
+
+      // Walk-cycle frame swap — driven by combined planar speed
+      const planarSpeed = Math.hypot(vx, vz * Z_TRAVEL_PX);
+      if (!reduced && planarSpeed > 20) {
         if (t - lastFrameAt.current > 180) {
           setFrame((f) => (f === 0 ? 1 : 0));
           lastFrameAt.current = t;
@@ -290,44 +397,56 @@ export const PixelCharacter = forwardRef<
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minX, maxX, reduced]);
+  }, [minX, maxX, minZ, maxZ, reduced]);
 
   const def = frame === 0 ? SPRITE_A : SPRITE_B;
-  const w = def.width * scale;
-  const h = def.height * scale;
+  // Perspective scale: backScaleFactor at z=0, scale at z=1
+  const persp = lerp(backScaleFactor, 1, z);
+  const effectiveScale = scale * persp;
+  const w = def.width * effectiveScale;
+  const h = def.height * effectiveScale;
+  const screenY = lerp(backY, frontY, z) - h; // foot rests at the projected y
+  // z-order: deeper into scene → smaller zIndex; near viewer → larger.
+  // Range chosen so the character sits BEHIND back-wall cabinets (z-index 20)
+  // when at the back of the room (z=0), in front of them when stepping
+  // forward to interact (standZ≈0.14), and clearly in front of mid-floor
+  // props when near the viewer (z=1).
+  const charZIndex = 19 + Math.round(z * 16); // 19 (back) → 35 (front)
 
   return (
     <>
       {/* Soft drop shadow ellipse under the character */}
       <div
         aria-hidden
-        className="pointer-events-none absolute z-20"
+        className="pointer-events-none absolute"
         style={{
-          left: x - w / 2 + w * 0.18,
-          top: y + h - 6,
+          left: x - (w * 0.64) / 2,
+          top: screenY + h - 6,
           width: w * 0.64,
-          height: 10,
+          height: 10 * persp,
           background:
             'radial-gradient(closest-side, rgba(0,0,0,0.55), transparent 80%)',
           filter: 'blur(2px)',
+          zIndex: charZIndex - 1,
         }}
       />
       <div
         aria-label="Player character"
         role="img"
-        className="pointer-events-none absolute z-30"
+        className="pointer-events-none absolute"
         style={{
           left: x - w / 2,
-          top: y,
+          top: screenY,
           width: w,
           height: h,
           transform: facing === 'left' ? 'scaleX(-1)' : undefined,
           transformOrigin: 'center',
           filter:
             'drop-shadow(0 4px 4px rgba(0,0,0,0.7)) drop-shadow(0 0 6px rgba(255,44,159,0.25))',
+          zIndex: charZIndex,
         }}
       >
-        <Sprite def={def} scale={scale} />
+        <Sprite def={def} scale={effectiveScale} />
       </div>
     </>
   );

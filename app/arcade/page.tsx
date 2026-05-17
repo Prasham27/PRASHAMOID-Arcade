@@ -21,11 +21,11 @@ const SECTION_TILE_COLOR = {
 } as const;
 
 const SECTION_DESCRIPTIONS: Record<SectionId, string> = {
-  about: 'Who I am, what I work on, where to find me.',
-  projects: 'GNN ATPG, gilt funds, polar codes, PODEM and more.',
-  experience: 'Education, open-source contributions, coursework.',
-  skills: 'Languages, ML stack, hardware, theory — rated.',
-  contact: 'Drop a coin. Send a signal.',
+  player: 'Who I am, what I work on, where to find me.',
+  games: 'GNN ATPG, gilt funds, polar codes, PODEM and more.',
+  levels: 'Education, open-source contributions, coursework.',
+  inventory: 'Languages, ML stack, hardware, theory — rated.',
+  comms: 'Drop a coin. Send a signal.',
 };
 
 export default function ArcadeFloorPage() {
