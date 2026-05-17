@@ -13,11 +13,13 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: '/arcade', label: 'ARCADE', color: 'pink' },
-  { href: '/inventory', label: 'INVENTORY', color: 'cyan' },
-  { href: '/levels', label: 'LEVELS', color: 'yellow' },
-  { href: '/scores', label: 'HI-SCORES', color: 'green' },
-  { href: '/play', label: 'PLAY', color: 'pink' },
-  { href: '/comms', label: 'COMMS', color: 'cyan' },
+  { href: '/overview', label: 'ABOUT', color: 'pink' },
+  { href: '/projects', label: 'PROJECTS', color: 'cyan' },
+  { href: '/levels', label: 'EXPERIENCE', color: 'yellow' },
+  { href: '/inventory', label: 'SKILLS', color: 'green' },
+  { href: '/comms', label: 'CONTACT', color: 'pink' },
+  { href: '/play', label: 'PLAY', color: 'cyan' },
+  { href: '/scores', label: 'HI-SCORES', color: 'yellow' },
 ];
 
 const colorMap = {

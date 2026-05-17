@@ -10,74 +10,109 @@ import {
 import type { SpriteDef } from '@/lib/sprites';
 import { Sprite } from '@/components/icons/Sprite';
 
-/** Hooded pixel figure — 16w x 24h. Two-frame walk cycle. */
+/** Hooded pixel figure — 24w x 32h. Two-frame walk cycle.
+ *  Palette key:
+ *   .  transparent
+ *   K  ink outline / shadow
+ *   H  hood / hoodie body (dark purple)
+ *   D  hood deep-shadow
+ *   C  cyan trim
+ *   P  pink accent strip
+ *   S  skin (face)
+ *   F  face shadow
+ *   E  eye dark
+ *   N  pants (near-black violet)
+ *   B  belt
+ *   Y  belt buckle
+ *   W  shoes (off-white)
+ */
 const PALETTE = {
   '.': 'transparent',
-  K: '#0b0014', // shadow / outline
-  H: '#361052', // hood
-  P: '#ff2c9f', // hood trim accent
-  F: '#c7a8e8', // face shadow
-  W: '#f5e8ff', // face highlight
-  Y: '#ffe600', // belt/coin
-  B: '#14001f', // boots
-  C: '#00f0ff', // cyan trim
+  K: '#0b0014',
+  H: '#3d1c66',
+  D: '#22093f',
+  C: '#00f0ff',
+  P: '#ff2c9f',
+  S: '#f1c9a5',
+  F: '#c79680',
+  E: '#0b0014',
+  N: '#14001f',
+  B: '#5a2c8a',
+  Y: '#ffe600',
+  W: '#f5e8ff',
 } as const;
 
-const COMMON_HEAD = [
-  '....HHHHHHHH....',
-  '...HKKKKKKKKH...',
-  '..HKHHHHHHHHHK..',
-  '..HKHFFFFFFFHK..',
-  '..HKHFWWFWWFHK..',
-  '..HKHFFFFFFFHK..',
-  '..HKHHHHHHHHHK..',
-  '..HKKHHHHHHKKH..',
-  '...HHHHHHHHHH...',
-  '....KCCCCCCK....',
-  '....KCYYCYCK....',
-  '....KCCCCCCK....',
-  '...HKKKKKKKKH...',
+// Shared rows for head + torso (24 wide, 18 tall)
+const HEAD_AND_TORSO: string[] = [
+  '........KKKKKKKK........', // 0  hood crown
+  '......KKHHHHHHHHKK......', // 1
+  '.....KHHHHHHHHHHHHK.....', // 2
+  '....KHHHDDDDDDDDHHHK....', // 3
+  '....KHHDSSSSSSSSDHHK....', // 4  hood opening / face top
+  '...KHHDSSSSSSSSSSDHHK...', // 5
+  '...KHHDSFFEEFFEEFSDHHK..', // 6  eyes row
+  '...KHHDSSSSSSSSSSDHHK...', // 7
+  '...KHHDDSSSSSSSSDDHHK...', // 8  jaw
+  '....KHHDDDDDDDDDHHHK....', // 9  neck
+  '....KHHHHHHHHHHHHHK.....', // 10
+  '...KHHHHHHHCCHHHHHHK....', // 11  shoulders + cyan trim collar
+  '..KHHHCHHHHCCHHHHCHHK...', // 12  hoodie body, cyan strap
+  '..KHHHCHHHHCCHHHHCHHK...', // 13
+  '..KHHHCHHHHCCHHHHCHHK...', // 14
+  '..KHHHCHHHHPPHHHHCHHK...', // 15  pink pocket
+  '..KHHHHHHHHPPHHHHHHHK...', // 16
+  '..KHHHHHBBBBBBBBHHHHK...', // 17  belt
 ];
 
+// Frame A — standing / step 1 (legs vertical)
 const FRAME_A: string[] = [
-  ...COMMON_HEAD,
-  '...HHHHHHHHHH...',
-  '...HHHHHHHHHH...',
-  '...HH......HH...',
-  '...HH......HH...',
-  '...HH......HH...',
-  '...BB......BB...',
-  '..BBBB....BBBB..',
-  '..BBBB....BBBB..',
-  '................',
-  '................',
+  ...HEAD_AND_TORSO,
+  '..KHHHHHBYYYYYBBHHHHK...', // 18  belt buckle
+  '..KHHHHHHHHHHHHHHHHHK...', // 19  bottom of hoodie hem
+  '...KNNNNN....NNNNNK.....', // 20  pants start
+  '...KNNNNN....NNNNNK.....', // 21
+  '...KNNNNN....NNNNNK.....', // 22
+  '...KNNNNN....NNNNNK.....', // 23
+  '...KNNNNN....NNNNNK.....', // 24
+  '...KNNNNN....NNNNNK.....', // 25
+  '...KNNNNN....NNNNNK.....', // 26
+  '...KNNNNN....NNNNNK.....', // 27
+  '..KWWWWWWK..KWWWWWWK....', // 28  shoes
+  '..KWWWWWWK..KWWWWWWK....', // 29
+  '..KKKKKKKK..KKKKKKKK....', // 30  shoe outline
+  '........................', // 31
 ];
 
+// Frame B — mid-step (one leg forward)
 const FRAME_B: string[] = [
-  ...COMMON_HEAD,
-  '...HHHHHHHHHH...',
-  '...HHHHHHHHHH...',
-  '....HH....HH....',
-  '....HH....HH....',
-  '...HH......HH...',
-  '...BB......BB...',
-  '..BBBB......BB..',
-  '..BBBB.....BBB..',
-  '................',
-  '................',
+  ...HEAD_AND_TORSO,
+  '..KHHHHHBYYYYYBBHHHHK...', // 18  belt buckle
+  '..KHHHHHHHHHHHHHHHHHK...', // 19
+  '...KNNNNN....NNNNNK.....', // 20
+  '...KNNNNN....NNNNNK.....', // 21
+  '...KNNNNN....NNNNNK.....', // 22
+  '....KNNNN....NNNNNK.....', // 23  rear leg lifts (chars shift)
+  '....KNNNN.....NNNNK.....', // 24
+  '.....KNNN......NNNK.....', // 25
+  '.....KNNN......NNNK.....', // 26
+  '.....KNNN.......NNK.....', // 27
+  '...KWWWWWWK..KWWWWWWK...', // 28  shoes
+  '...KWWWWWWK..KWWWWWWK...', // 29
+  '...KKKKKKKK..KKKKKKKK...', // 30
+  '........................', // 31
 ];
 
 const SPRITE_A: SpriteDef = {
   id: 'char_a',
-  width: 16,
-  height: 24,
+  width: 24,
+  height: 32,
   palette: PALETTE,
   rows: FRAME_A,
 };
 const SPRITE_B: SpriteDef = {
   id: 'char_b',
-  width: 16,
-  height: 24,
+  width: 24,
+  height: 32,
   palette: PALETTE,
   rows: FRAME_B,
 };
@@ -106,9 +141,9 @@ export interface PixelCharacterProps {
   reduced?: boolean;
 }
 
-const SPEED = 220; // px / sec
-const ACCEL = 1200;
-const FRICTION = 1000;
+const SPEED = 240; // px / sec
+const ACCEL = 1400;
+const FRICTION = 1100;
 
 export const PixelCharacter = forwardRef<
   PixelCharacterHandle,
@@ -130,7 +165,7 @@ export const PixelCharacter = forwardRef<
   const [frame, setFrame] = useState<0 | 1>(0);
   const [facing, setFacing] = useState<'left' | 'right'>('right');
   const xRef = useRef(initialX);
-  const vRef = useRef(0); // velocity px/s
+  const vRef = useRef(0);
   const targetRef = useRef<{ x: number; resolve: () => void } | null>(null);
   const inputRef = useRef<{ left: boolean; right: boolean }>({
     left: false,
@@ -139,7 +174,6 @@ export const PixelCharacter = forwardRef<
   const lastFrameAt = useRef(0);
   const rafRef = useRef<number | null>(null);
 
-  // Imperative API
   useImperativeHandle(ref, () => ({
     walkTo(targetX: number) {
       const clamped = Math.max(minX, Math.min(maxX, targetX));
@@ -151,7 +185,6 @@ export const PixelCharacter = forwardRef<
     getX: () => xRef.current,
   }));
 
-  // Keyboard input → only if inputEnabled and not focused on a field
   useEffect(() => {
     if (!inputEnabled) return;
     const isTypingTarget = (el: EventTarget | null): boolean => {
@@ -190,7 +223,6 @@ export const PixelCharacter = forwardRef<
     };
   }, [inputEnabled]);
 
-  // Main loop — RAF integration of velocity
   useEffect(() => {
     let last = performance.now();
     const tick = (t: number) => {
@@ -223,7 +255,6 @@ export const PixelCharacter = forwardRef<
         if (v < -SPEED) v = -SPEED;
         setFacing(dir > 0 ? 'right' : 'left');
       } else {
-        // friction
         if (v > 0) v = Math.max(0, v - FRICTION * dt);
         else if (v < 0) v = Math.min(0, v + FRICTION * dt);
       }
@@ -243,7 +274,6 @@ export const PixelCharacter = forwardRef<
       setX(nx);
       onPositionChange?.(nx);
 
-      // walk cycle
       if (!reduced && Math.abs(v) > 20) {
         if (t - lastFrameAt.current > 180) {
           setFrame((f) => (f === 0 ? 1 : 0));
@@ -267,21 +297,38 @@ export const PixelCharacter = forwardRef<
   const h = def.height * scale;
 
   return (
-    <div
-      aria-label="Player character"
-      role="img"
-      className="pointer-events-none absolute z-30"
-      style={{
-        left: x - w / 2,
-        top: y,
-        width: w,
-        height: h,
-        transform: facing === 'left' ? 'scaleX(-1)' : undefined,
-        transformOrigin: 'center',
-        filter: 'drop-shadow(0 6px 8px rgba(0,0,0,0.65))',
-      }}
-    >
-      <Sprite def={def} scale={scale} />
-    </div>
+    <>
+      {/* Soft drop shadow ellipse under the character */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute z-20"
+        style={{
+          left: x - w / 2 + w * 0.18,
+          top: y + h - 6,
+          width: w * 0.64,
+          height: 10,
+          background:
+            'radial-gradient(closest-side, rgba(0,0,0,0.55), transparent 80%)',
+          filter: 'blur(2px)',
+        }}
+      />
+      <div
+        aria-label="Player character"
+        role="img"
+        className="pointer-events-none absolute z-30"
+        style={{
+          left: x - w / 2,
+          top: y,
+          width: w,
+          height: h,
+          transform: facing === 'left' ? 'scaleX(-1)' : undefined,
+          transformOrigin: 'center',
+          filter:
+            'drop-shadow(0 4px 4px rgba(0,0,0,0.7)) drop-shadow(0 0 6px rgba(255,44,159,0.25))',
+        }}
+      >
+        <Sprite def={def} scale={scale} />
+      </div>
+    </>
   );
 });
