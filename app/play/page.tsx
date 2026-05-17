@@ -5,6 +5,7 @@ import { Prashamoid, type GameSnapshot } from '@/lib/game/prashamoid';
 import { CoinSlotButton } from '@/components/hud/CoinSlotButton';
 import { PixelText } from '@/components/effects/PixelText';
 import { ScoreReadout } from '@/components/hud/ScoreReadout';
+import { GameboyFrame } from '@/components/scene/GameboyFrame';
 import { unlock } from '@/lib/achievements';
 import { useAchievementBus } from '@/components/konami/achievementBus';
 
@@ -132,47 +133,50 @@ export default function PlayPage() {
     );
   }
 
+  const statusBar = (
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <p className="font-pixel text-[10px] tracking-widest text-text-muted">
+        ARCADE GAME //
+      </p>
+      <div className="flex gap-4">
+        <ScoreReadout label="SCORE" value={snap.score} color="yellow" />
+        <ScoreReadout label="BEST" value={best} color="cyan" />
+        <ScoreReadout
+          label="LIVES"
+          value={'♥'.repeat(snap.lives) || '∅'}
+          color="pink"
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-5xl px-6 pb-16 pt-8 md:px-10 md:pt-12">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-pixel text-[10px] tracking-widest text-text-muted">
-            ARCADE GAME //
-          </p>
-          <h1 className="mt-3 font-pixel text-2xl text-pink phosphor-pink md:text-4xl">
-            PRASHAMOID
-          </h1>
-        </div>
-        <div className="flex gap-4">
-          <ScoreReadout label="SCORE" value={snap.score} color="yellow" />
-          <ScoreReadout label="BEST" value={best} color="cyan" />
-          <ScoreReadout label="LIVES" value={'♥'.repeat(snap.lives) || '∅'} color="pink" />
-        </div>
-      </header>
-
-      <div className="relative border-2 border-border bg-bg">
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={500}
-          className="block w-full"
-          style={{ aspectRatio: '8 / 5' }}
-          tabIndex={0}
-        />
-        {snap.gameOver && (
-          <GameOverPanel
-            score={snap.score}
-            name={name}
-            onNameChange={setName}
-            onSubmit={submitScore}
-            submitState={submitState}
-            submitMsg={submitMsg}
-            onRestart={restart}
+      <GameboyFrame powered={!snap.gameOver} title="PRASHAMOID" statusBar={statusBar}>
+        <div className="relative">
+          <canvas
+            ref={canvasRef}
+            width={800}
+            height={500}
+            className="block w-full"
+            style={{ aspectRatio: '8 / 5' }}
+            tabIndex={0}
           />
-        )}
-      </div>
+          {snap.gameOver && (
+            <GameOverPanel
+              score={snap.score}
+              name={name}
+              onNameChange={setName}
+              onSubmit={submitScore}
+              submitState={submitState}
+              submitMsg={submitMsg}
+              onRestart={restart}
+            />
+          )}
+        </div>
+      </GameboyFrame>
 
-      <div className="mt-4 grid gap-3 text-center text-text-dim md:grid-cols-4">
+      <div className="mt-6 grid gap-3 text-center text-text-dim md:grid-cols-4">
         <KeyCap k="A / ←" label="ROT LEFT" />
         <KeyCap k="D / →" label="ROT RIGHT" />
         <KeyCap k="W / ↑" label="THRUST" />
