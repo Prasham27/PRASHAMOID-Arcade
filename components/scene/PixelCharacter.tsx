@@ -66,11 +66,25 @@ const HOODIE_HEX: Record<HoodieColor, { body: string; shade: string }> = {
   green: { body: '#39ff14', shade: '#1ba300' },
   red: { body: '#ff3344', shade: '#a01a25' },
   white: { body: '#f5e8ff', shade: '#9a8aa8' },
+  black: { body: '#1a1a1a', shade: '#0a0a0a' },
+  brown: { body: '#5a3a1f', shade: '#3a230f' },
 };
 
-function buildCharacterPalette(hoodie: HoodieColor): PaletteMap {
+function buildCharacterPalette(
+  hoodie: HoodieColor,
+  hideEyes: boolean,
+): PaletteMap {
   const { body, shade } = HOODIE_HEX[hoodie];
-  return { ...BASE_PALETTE, H: body, D: shade };
+  const palette: PaletteMap = { ...BASE_PALETTE, H: body, D: shade };
+  // When goggles cover the eyes, render the eye pixels as skin so no eye
+  // detail bleeds through any (theoretically) transparent gap in the
+  // goggle overlay. Goggle lenses are also fully opaque — this is belt
+  // and suspenders for layering correctness.
+  if (hideEyes) {
+    palette.E = palette.S; // eye dark → skin
+    palette.I = palette.S; // eye shine → skin
+  }
+  return palette;
 }
 
 /*
@@ -92,10 +106,10 @@ const HEAD_AND_TORSO: string[] = [
   '....KHHHRRRRRRRRRRHHK...', //  4
   '....KHHSSSSSSSSSSSSHK...', //  5  face top (forehead)
   '...KHHSSSSSSSSSSSSSSHK..', //  6
-  '...KHHSEEISSSSSSSEEISHK.', //  7  eyes (2-tall ovals w/ shine)
-  '...KHHSEEISSSSSSSEEISHK.', //  8  eye row 2
-  '...KHHSSBBSSSSSSSSBBSHK.', //  9  blush cheeks under each eye
-  '...KHHSSSSSSMMMMSSSSSHK.', // 10  smile mouth (4px wide)
+  '...KHHSSSSSSSSSSSSSSSHK.', //  7  forehead (eyes dropped to single row below)
+  '...KHHSEESSSSSSSSSEESHK.', //  8  eyes — 1px-tall short ovals at cols 7-8 & 17-18 (chill / unamused)
+  '...KHHSSSSSSMSSSSSSSSHK.', //  9  smirk: right mouth pixel lifted (col 12)
+  '...KHHSSSSSMSSSSSSSSSHK.', // 10  smirk: left mouth pixel (col 11) — subtle smirk
   '....KHHSSSSSSSSSSSSSHK..', // 11  chin
   '.....KHHHSSSSSSSSHHHK...', // 12  jaw/neck blends to hood
   // ---- TORSO/ARMS (rows 13..22, 10h) ----
@@ -157,12 +171,13 @@ function buildSprite(
   id: string,
   rows: string[],
   hoodie: HoodieColor,
+  hideEyes: boolean,
 ): SpriteDef {
   return {
     id,
     width: SPRITE_WIDTH,
     height: SPRITE_HEIGHT,
-    palette: buildCharacterPalette(hoodie),
+    palette: buildCharacterPalette(hoodie, hideEyes),
     rows,
   };
 }
@@ -281,11 +296,18 @@ const HAT_OVERLAYS: Record<Exclude<HatType, 'none'>, OverlayDef> = {
 };
 
 // === GOGGLES SPRITES =======================================================
-// Small 10w x 4h overlays positioned across the eyes.
+// 14w x 4h overlays positioned across the eyes. Width was bumped from 12 → 14
+// (and offsetX from 6 → 5) so the overlay fully spans both eye columns
+// (left eye at sprite cols 7-8, right eye at sprite cols 17-18) — the old
+// 12-wide overlay was leaving the right eye's outer pixel uncovered.
+// Lens pixels are fully opaque so eyes cannot show through; additionally,
+// when goggles are equipped, buildCharacterPalette() remaps E/I to skin
+// color so any sub-pixel layering quirk still produces no visible eye.
 const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
-  // Chunky steampunk-style frame (dark) with cyan lenses + small strap dots
+  // Chunky steampunk-style frame (dark) with solid cyan lenses + strap bridge.
+  // Each lens is a 3x2 opaque cyan block that fully covers its eye.
   'pixel-goggles': {
-    width: 12,
+    width: 14,
     height: 4,
     palette: {
       '.': 'transparent',
@@ -295,17 +317,17 @@ const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
       I: '#ffffff',
     },
     rows: [
-      'KKKKKKKKKKKK',
-      'KCCIKDDKCCIK',
-      'KCCCKDDKCCCK',
-      'KKKKKKKKKKKK',
+      'KKKKKKKKKKKKKK',
+      'KCCCIKDDKCCCIK',
+      'KCCCCKDDKCCCCK',
+      'KKKKKKKKKKKKKK',
     ],
-    offsetX: 6,
+    offsetX: 5,
     offsetY: 7,
   },
-  // Single horizontal cyan visor
+  // Single horizontal cyan visor — fully opaque strip across both eyes.
   visor: {
-    width: 12,
+    width: 14,
     height: 4,
     palette: {
       '.': 'transparent',
@@ -314,17 +336,18 @@ const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
       I: '#aff5ff',
     },
     rows: [
-      'KKKKKKKKKKKK',
-      'KCCCIICCCCCK',
-      'KCCCCCCCCCCK',
-      'KKKKKKKKKKKK',
+      'KKKKKKKKKKKKKK',
+      'KCCCCIICCCCCCK',
+      'KCCCCCCCCCCCCK',
+      'KKKKKKKKKKKKKK',
     ],
-    offsetX: 6,
+    offsetX: 5,
     offsetY: 7,
   },
-  // 8-bit black shades — solid lenses with a tiny white shine
+  // 8-bit black shades — solid black lenses with a tiny white shine.
+  // Both lenses are now fully opaque blocks (no sub-pixel transparency).
   shades: {
-    width: 12,
+    width: 14,
     height: 4,
     palette: {
       '.': 'transparent',
@@ -332,12 +355,12 @@ const GOGGLES_OVERLAYS: Record<Exclude<GogglesType, 'none'>, OverlayDef> = {
       I: '#ffffff',
     },
     rows: [
-      'KKKKKKKKKKKK',
-      'KKKIKKKKIKKK',
-      'KKKKKKKKKKKK',
-      '..K......K..',
+      'KKKKKKKKKKKKKK',
+      'KKKKIKKKKIKKKK',
+      'KKKKKKKKKKKKKK',
+      '..K........K..',
     ],
-    offsetX: 6,
+    offsetX: 5,
     offsetY: 7,
   },
 };
@@ -378,16 +401,16 @@ export interface PixelCharacterProps {
 }
 
 // Horizontal movement
-const SPEED_X = 240; // px / sec — top horizontal speed
-const ACCEL_X = 1400;
-const FRICTION_X = 1100;
+const SPEED_X = 300; // 1.25x speed bump (was 240) — px/sec top horizontal speed
+const ACCEL_X = 1750; // 1.25x speed bump (was 1400)
+const FRICTION_X = 1375; // 1.25x speed bump (was 1100)
 
 // Depth movement
 const Z_TRAVEL_PX = 400;
-const SPEED_VZ_PX = 180;
+const SPEED_VZ_PX = 225; // 1.25x speed bump (was 180)
 const SPEED_Z = SPEED_VZ_PX / Z_TRAVEL_PX;
-const ACCEL_Z = 1100 / Z_TRAVEL_PX;
-const FRICTION_Z = 900 / Z_TRAVEL_PX;
+const ACCEL_Z = 1375 / Z_TRAVEL_PX; // 1.25x speed bump (was 1100)
+const FRICTION_Z = 1125 / Z_TRAVEL_PX; // 1.25x speed bump (was 900)
 
 const ARRIVAL_X = 4;
 const ARRIVAL_Z = 0.012;
@@ -476,13 +499,16 @@ export const PixelCharacter = forwardRef<
   }, [reduced]);
 
   // Build the two sprite frames based on current hoodie color.
+  // When goggles are equipped, the base sprite's eye pixels are remapped
+  // to skin so nothing shows through the (opaque) goggle lenses.
+  const hideEyes = gogglesType !== 'none';
   const spriteA = useMemo<SpriteDef>(
-    () => buildSprite('char_a', FRAME_A, hoodieColor),
-    [hoodieColor],
+    () => buildSprite('char_a', FRAME_A, hoodieColor, hideEyes),
+    [hoodieColor, hideEyes],
   );
   const spriteB = useMemo<SpriteDef>(
-    () => buildSprite('char_b', FRAME_B, hoodieColor),
-    [hoodieColor],
+    () => buildSprite('char_b', FRAME_B, hoodieColor, hideEyes),
+    [hoodieColor, hideEyes],
   );
 
   useImperativeHandle(ref, () => ({
@@ -983,9 +1009,10 @@ export function CharacterPreview({
   gogglesType,
   animated = true,
 }: CharacterPreviewProps) {
+  const previewHideEyes = gogglesType !== 'none';
   const def = useMemo<SpriteDef>(
-    () => buildSprite('preview', FRAME_A, hoodieColor),
-    [hoodieColor],
+    () => buildSprite('preview', FRAME_A, hoodieColor, previewHideEyes),
+    [hoodieColor, previewHideEyes],
   );
   const [bob, setBob] = useState(0);
 

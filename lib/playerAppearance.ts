@@ -8,7 +8,9 @@ export type HoodieColor =
   | 'yellow'
   | 'green'
   | 'red'
-  | 'white';
+  | 'white'
+  | 'black'
+  | 'brown';
 export type HatType =
   | 'none'
   | 'beanie'
@@ -39,9 +41,9 @@ export interface PlayerAppearanceState {
 }
 
 const DEFAULTS = {
-  hoodieColor: 'cyan' as HoodieColor,
-  hatType: 'none' as HatType,
-  // Default to savage 8-bit shades for the cool look (was 'none').
+  // Chill default look: black hoodie + crown + shades.
+  hoodieColor: 'black' as HoodieColor,
+  hatType: 'crown' as HatType,
   gogglesType: 'shades' as GogglesType,
 };
 
@@ -54,6 +56,8 @@ const HOODIE_VALUES: readonly HoodieColor[] = [
   'green',
   'red',
   'white',
+  'black',
+  'brown',
 ];
 const HAT_VALUES: readonly HatType[] = [
   'none',

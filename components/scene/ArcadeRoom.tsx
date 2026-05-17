@@ -19,10 +19,14 @@ import {
   PixelCharacter,
   type PixelCharacterHandle,
 } from './PixelCharacter';
+import { PixelBeagle } from './PixelBeagle';
 import { NeonSign } from './NeonSign';
 import { Vendingmachine } from './Vendingmachine';
 import { SnackVendingModal } from './SnackVendingModal';
-import { usePlayerInventory } from '@/lib/playerInventory';
+import {
+  usePlayerInventory,
+  hydratePlayerInventory,
+} from '@/lib/playerInventory';
 import type { SnackItem } from '@/lib/snack-items';
 import { TrashCan } from './TrashCan';
 import { ChangingRoom } from './ChangingRoom';
@@ -149,6 +153,13 @@ const CONSUME_SPOT_Z = 0.6;
 
 const TRASH_X = 80;
 const TRASH_Y = 620;
+/** Spot just to the right of the trash can where the character stands
+ *  to toss the wrapper in. */
+const TRASH_STAND_X = 150;
+const TRASH_STAND_Z = 0.85;
+/** How long to hold the eat/drink animation before walking to the trash.
+ *  Drink tilt = 600ms; eat munch = 1500ms — wait a bit past the longer one. */
+const CONSUME_HOLD_MS = 1700;
 
 // Decorative wing props (no hotspots)
 // ChangingRoom replaces the old EXIT door — same anchor point so the floor
@@ -214,6 +225,7 @@ export function ArcadeRoom({
   const router = useRouter();
   const charRef = useRef<PixelCharacterHandle>(null);
   const consumeItem = usePlayerInventory((s) => s.consume);
+  const throwAway = usePlayerInventory((s) => s.throwAway);
   const [charX, setCharX] = useState(SCENE_WIDTH / 2);
   const [charZ, setCharZ] = useState(0.7);
   const [flashing, setFlashing] = useState(false);
@@ -221,19 +233,37 @@ export function ArcadeRoom({
   const [vendingOpen, setVendingOpen] = useState(false);
   const busyRef = useRef(false);
 
-  /** Modal handed us a chosen snack — walk the character to a visible
-   *  spot on the floor (off the back wall), THEN trigger consume() so the
-   *  eat/drink animation plays where the visitor can see it. */
+  // Hydrate snack inventory (consumedHistory + trashedCount) from
+  // sessionStorage so the history persists across page reloads in the
+  // same tab.
+  useEffect(() => {
+    hydratePlayerInventory();
+  }, []);
+
+  /** Full snack flow: walk to visible spot → consume → wait for the
+   *  eat/drink animation → walk to the trash can → throwAway. The
+   *  inventory store persists consumedHistory + trashedCount to
+   *  sessionStorage on every step. */
   const handlePickSnack = useCallback(
     async (item: SnackItem) => {
       try {
         await charRef.current?.walkTo(CONSUME_SPOT_X, CONSUME_SPOT_Z);
       } catch {
-        /* interrupted — still consume so the player isn't stuck without feedback */
+        /* keyboard interrupted — still consume so the visitor sees feedback */
       }
       consumeItem(item);
+      // Let the eat/drink animation play before heading to the trash.
+      await new Promise<void>((resolve) =>
+        window.setTimeout(resolve, CONSUME_HOLD_MS),
+      );
+      try {
+        await charRef.current?.walkTo(TRASH_STAND_X, TRASH_STAND_Z);
+      } catch {
+        /* interrupted again — throw anyway so the held item clears */
+      }
+      throwAway();
     },
-    [consumeItem],
+    [consumeItem, throwAway],
   );
 
   const hotspots = useMemo<Hotspot[]>(
@@ -618,6 +648,14 @@ export function ArcadeRoom({
         maxX={SCENE_WIDTH - 50}
         scale={CHAR_SCALE}
         onPositionChange={onCharMove}
+        reduced={reduced}
+      />
+      <PixelBeagle
+        targetX={charX}
+        targetZ={charZ}
+        backY={BACK_Y}
+        frontY={FRONT_Y}
+        scale={CHAR_SCALE}
         reduced={reduced}
       />
 

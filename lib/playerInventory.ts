@@ -1,8 +1,23 @@
 import { create } from 'zustand';
 import type { SnackItem } from './snack-items';
 
-/** How long the character holds the snack before it auto-clears, in ms. */
-const HOLD_DURATION_MS = 2800;
+/** Safety-net auto-clear if the throw-away flow never fires (e.g., the
+ *  player navigates away mid-consume). Long enough that the normal
+ *  consume → walk-to-trash → throw sequence always completes first. */
+const AUTO_CLEAR_SAFETY_MS = 12_000;
+const STORAGE_KEY = 'arcade.snackInventory';
+const HISTORY_CAP = 50;
+
+/** A single past consumption — used to remember what was eaten this session. */
+export interface ConsumedEntry {
+  itemId: string;
+  at: number;
+}
+
+interface PersistedShape {
+  consumedHistory: ConsumedEntry[];
+  trashedCount: number;
+}
 
 /** Module-level handle so a fresh consume() can cancel the previous auto-clear. */
 let timeoutHandle: number | null = null;
@@ -15,41 +30,98 @@ interface PlayerInventoryState {
    * the eat/drink animation even when the same item is selected twice.
    */
   consumptionId: number;
+  /** Every snack the visitor has eaten/drunk this session, newest-first.
+   *  Persisted to sessionStorage so it survives page reloads inside the
+   *  same browser tab. Capped at HISTORY_CAP entries. */
+  consumedHistory: ConsumedEntry[];
+  /** Count of wrappers/cans thrown into the trash this session. */
+  trashedCount: number;
+  /** True once we've read sessionStorage. */
+  hydrated: boolean;
   /**
    * Called when the player picks an item from the vending machine.
-   * Sets heldItem, increments consumptionId, then auto-clears heldItem
-   * after HOLD_DURATION_MS. Subsequent consume() calls cancel and reset
-   * the timer.
+   * Sets heldItem, increments consumptionId, appends to history, and
+   * arms a long safety-net auto-clear. The expected flow is for the
+   * caller to follow up with throwAway() after the walk-to-trash; if
+   * that never happens, the safety timer eventually clears heldItem.
    */
   consume: (item: SnackItem) => void;
+  /** Called after the character has walked to the trash. Clears the held
+   *  item and bumps trashedCount. */
+  throwAway: () => void;
   /** Manually clear (used for testing or character unmount). */
   clear: () => void;
+  /** Internal — flips hydrated true after sessionStorage is read. */
+  _hydrate: (s: Partial<PersistedShape>) => void;
+}
+
+function persist(state: PersistedShape): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        consumedHistory: state.consumedHistory.slice(0, HISTORY_CAP),
+        trashedCount: state.trashedCount,
+      }),
+    );
+  } catch {
+    /* sessionStorage unavailable or full — ignore */
+  }
 }
 
 export const usePlayerInventory = create<PlayerInventoryState>((set, get) => ({
   heldItem: null,
   consumptionId: 0,
+  consumedHistory: [],
+  trashedCount: 0,
+  hydrated: false,
 
   consume: (item) => {
-    // Cancel any previous auto-clear so the new item lives the full duration.
     if (timeoutHandle !== null) {
       window.clearTimeout(timeoutHandle);
       timeoutHandle = null;
     }
-    set((s) => ({
-      heldItem: item,
-      consumptionId: s.consumptionId + 1,
-    }));
-    // Only register a timer in browser contexts (SSR-safe).
+    const entry: ConsumedEntry = { itemId: item.id, at: Date.now() };
+    set((s) => {
+      const nextHistory = [entry, ...s.consumedHistory].slice(0, HISTORY_CAP);
+      persist({
+        consumedHistory: nextHistory,
+        trashedCount: s.trashedCount,
+      });
+      return {
+        heldItem: item,
+        consumptionId: s.consumptionId + 1,
+        consumedHistory: nextHistory,
+      };
+    });
     if (typeof window !== 'undefined') {
       timeoutHandle = window.setTimeout(() => {
         timeoutHandle = null;
-        // Only clear if no fresh consume() raced past us.
         if (get().heldItem === item) {
           set({ heldItem: null });
         }
-      }, HOLD_DURATION_MS);
+      }, AUTO_CLEAR_SAFETY_MS);
     }
+  },
+
+  throwAway: () => {
+    if (timeoutHandle !== null) {
+      window.clearTimeout(timeoutHandle);
+      timeoutHandle = null;
+    }
+    set((s) => {
+      if (!s.heldItem) return s; // nothing to throw
+      const nextTrashed = s.trashedCount + 1;
+      persist({
+        consumedHistory: s.consumedHistory,
+        trashedCount: nextTrashed,
+      });
+      return {
+        heldItem: null,
+        trashedCount: nextTrashed,
+      };
+    });
   },
 
   clear: () => {
@@ -59,4 +131,43 @@ export const usePlayerInventory = create<PlayerInventoryState>((set, get) => ({
     }
     set({ heldItem: null });
   },
+
+  _hydrate: (s) => set(s),
 }));
+
+/** Read persisted snack history from sessionStorage. Safe to call multiple
+ *  times — subsequent calls after the first are no-ops. Intended to be
+ *  invoked once from a top-level mount-once helper component. */
+export function hydratePlayerInventory(): void {
+  if (typeof window === 'undefined') return;
+  const st = usePlayerInventory.getState();
+  if (st.hydrated) return;
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        const p = parsed as Record<string, unknown>;
+        const next: Partial<PersistedShape> = {};
+        if (Array.isArray(p.consumedHistory)) {
+          next.consumedHistory = (p.consumedHistory as unknown[])
+            .filter(
+              (e): e is ConsumedEntry =>
+                !!e &&
+                typeof e === 'object' &&
+                typeof (e as ConsumedEntry).itemId === 'string' &&
+                typeof (e as ConsumedEntry).at === 'number',
+            )
+            .slice(0, HISTORY_CAP);
+        }
+        if (typeof p.trashedCount === 'number' && p.trashedCount >= 0) {
+          next.trashedCount = Math.floor(p.trashedCount);
+        }
+        st._hydrate(next);
+      }
+    }
+  } catch {
+    /* corrupt JSON — ignore */
+  }
+  usePlayerInventory.setState({ hydrated: true });
+}
