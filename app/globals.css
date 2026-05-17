@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import '../styles/arcade-theme.css';
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  font-family: var(--font-body), 'Courier New', monospace;
+  /* Pixel-perfect rendering — no font smoothing softening */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Pixelated images render crisply when scaled */
+img,
+canvas {
+  image-rendering: pixelated;
+}
+
+/* Selection — neon pink on purple */
+::selection {
+  background: var(--pink);
+  color: var(--bg);
+}
+
+/* Focus ring — neon yellow, 2px solid + offset, never removed */
+*:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Scrollbar — minimal arcade-flavored */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pink);
+}
+
+/* Skip-to-content link, hidden until focused */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10000;
+  padding: 12px 16px;
+  background: var(--yellow);
+  color: var(--bg);
+  font-family: var(--font-pixel);
+  font-size: 12px;
+}
+.skip-link:focus {
+  left: 12px;
+  top: 12px;
+}
