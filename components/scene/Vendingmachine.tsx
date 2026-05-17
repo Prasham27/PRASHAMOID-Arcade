@@ -2,21 +2,26 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
+import { Sprite } from '@/components/icons/Sprite';
+import { SNACK_ITEMS } from '@/lib/snack-items';
 
 export interface VendingmachineProps {
   x: number;
   y: number;
   active?: boolean;
+  /** Parent decides what activation means — typically: open the SnackVendingModal. */
   onActivate: () => void;
 }
 
-const BOTTLE_COLORS: string[][] = [
-  ['#ff2c9f', '#00f0ff', '#ffe600', '#39ff14'],
-  ['#00f0ff', '#ffe600', '#39ff14', '#ff2c9f'],
-  ['#39ff14', '#ff2c9f', '#00f0ff', '#ffe600'],
-];
-
-/** Tall arcade vending machine — clickable, routes to /comms via parent. */
+/**
+ * Tall arcade snack/drink dispenser — clickable. Activation is delegated
+ * to the parent (ArcadeRoom), which opens the SnackVendingModal.
+ *
+ * The 3 visible shelf rows preview the 3 categories:
+ *   row 0 = ENERGY DRINKS (4)
+ *   row 1 = SODAS (3) — last slot intentionally empty
+ *   row 2 = SNACKS (chips + candy bars, 4)
+ */
 export function Vendingmachine({
   x,
   y,
@@ -32,12 +37,24 @@ export function Vendingmachine({
     ? '0 0 20px #ffe600aa, 0 0 44px #ffe60055, 0 10px 14px rgba(0,0,0,0.85)'
     : '0 0 10px #ffe60033, 0 8px 12px rgba(0,0,0,0.8)';
 
+  // Group the SNACK_ITEMS into 3 rows of up to 4. Sodas only fill 3 of the
+  // 4 cells in row 1; the empty cell intentionally hints "out of stock".
+  const energyRow = SNACK_ITEMS.filter((s) => s.type === 'energy-drink').slice(
+    0,
+    4,
+  );
+  const sodaRow = SNACK_ITEMS.filter((s) => s.type === 'soda').slice(0, 4);
+  const snackRow = SNACK_ITEMS.filter(
+    (s) => s.type === 'chips' || s.type === 'candy',
+  ).slice(0, 4);
+  const rows = [energyRow, sodaRow, snackRow];
+
   return (
     <div
       className="absolute z-20"
       style={{ left: x - W / 2, top: y, width: W, height: H }}
     >
-      {/* [E] DROP COIN prompt */}
+      {/* [E] BUY prompt */}
       <div
         aria-hidden={!active}
         className={cn(
@@ -49,7 +66,7 @@ export function Vendingmachine({
           boxShadow: '0 0 10px #ffe60088',
         }}
       >
-        [E] DROP COIN
+        [E] BUY
       </div>
 
       {/* Halo on bricks */}
@@ -74,7 +91,7 @@ export function Vendingmachine({
         onClick={onActivate}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        aria-label="Vending machine — send a message"
+        aria-label="Vending machine — open snack dispenser"
         className="block h-full w-full text-left focus:outline-none"
       >
         <div
@@ -90,7 +107,7 @@ export function Vendingmachine({
             ].join(', '),
           }}
         >
-          {/* === POWER-UPS marquee sign (top) === */}
+          {/* === SNACKS marquee sign (top) === */}
           <div
             className="absolute left-2 right-2 overflow-hidden border-2 border-yellow text-center font-pixel uppercase tracking-widest"
             style={{
@@ -102,13 +119,14 @@ export function Vendingmachine({
               background:
                 'linear-gradient(180deg, rgba(255,230,0,0.18), rgba(255,230,0,0.05) 50%, rgba(255,230,0,0.18))',
               textShadow: '0 0 4px #ffe600, 0 0 10px #ffe600aa',
-              boxShadow: 'inset 0 0 10px rgba(255,230,0,0.4), 0 0 8px rgba(255,230,0,0.5)',
+              boxShadow:
+                'inset 0 0 10px rgba(255,230,0,0.4), 0 0 8px rgba(255,230,0,0.5)',
             }}
           >
-            POWER-UPS
+            SNACKS
           </div>
 
-          {/* === Glass display window with 3 rows of 4 bottles === */}
+          {/* === Glass display window with 3 shelves === */}
           <div
             className="absolute left-2 right-2 overflow-hidden border-2"
             style={{
@@ -124,7 +142,7 @@ export function Vendingmachine({
             }}
           >
             {/* 3 shelf rows */}
-            {BOTTLE_COLORS.map((row, ri) => (
+            {rows.map((row, ri) => (
               <div
                 key={`shelf-${ri}`}
                 className="absolute left-1 right-1 flex items-end justify-around"
@@ -133,60 +151,35 @@ export function Vendingmachine({
                   height: 38,
                 }}
               >
-                {row.map((color, ci) => (
-                  <div
-                    key={`b-${ri}-${ci}`}
-                    className="relative"
-                    style={{ width: 14, height: 32 }}
-                  >
-                    {/* Bottle cap */}
+                {Array.from({ length: 4 }).map((_, ci) => {
+                  const item = row[ci];
+                  return (
                     <div
-                      className="absolute left-1/2 -translate-x-1/2"
-                      style={{
-                        top: 0,
-                        width: 5,
-                        height: 4,
-                        background: '#7a5a96',
-                        borderRadius: '1px 1px 0 0',
-                      }}
-                    />
-                    {/* Neck */}
-                    <div
-                      className="absolute left-1/2 -translate-x-1/2"
-                      style={{
-                        top: 4,
-                        width: 4,
-                        height: 4,
-                        background: color,
-                        opacity: 0.85,
-                      }}
-                    />
-                    {/* Body */}
-                    <div
-                      className="absolute left-0 right-0 mx-auto"
-                      style={{
-                        top: 8,
-                        width: 11,
-                        height: 22,
-                        background: `linear-gradient(180deg, ${color} 0%, ${color}cc 70%, ${color}88 100%)`,
-                        border: '1px solid #050009',
-                        borderRadius: '2px 2px 1px 1px',
-                        boxShadow: `0 0 6px ${color}aa, inset 1px 0 0 rgba(255,255,255,0.3)`,
-                      }}
+                      key={`cell-${ri}-${ci}`}
+                      className="relative flex items-end justify-center"
+                      style={{ width: 18, height: 38 }}
                     >
-                      {/* Label */}
-                      <div
-                        className="absolute left-1/2 -translate-x-1/2"
-                        style={{
-                          top: 6,
-                          width: 7,
-                          height: 6,
-                          background: 'rgba(255,255,255,0.7)',
-                        }}
-                      />
+                      {item ? (
+                        <Sprite
+                          def={item.spriteShelf}
+                          scale={1}
+                          ariaLabel={item.name}
+                        />
+                      ) : (
+                        // Empty slot: faint silhouette
+                        <span
+                          className="block"
+                          style={{
+                            width: 14,
+                            height: 26,
+                            border: '1px dashed rgba(122,90,150,0.45)',
+                            background: 'rgba(0,0,0,0.4)',
+                          }}
+                        />
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {/* Shelf line */}
                 <div
                   className="absolute left-0 right-0"
@@ -224,8 +217,7 @@ export function Vendingmachine({
             style={{
               top: 166,
               height: 22,
-              background:
-                'linear-gradient(180deg, #2a1448, #170828)',
+              background: 'linear-gradient(180deg, #2a1448, #170828)',
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
             }}
           >
@@ -288,7 +280,7 @@ export function Vendingmachine({
                   textShadow: '0 0 4px rgba(122,90,150,0.6)',
                 }}
               >
-                /COMMS
+                FUEL UP
               </span>
             </div>
             {/* Flap lip */}

@@ -21,8 +21,10 @@ import {
 } from './PixelCharacter';
 import { NeonSign } from './NeonSign';
 import { Vendingmachine } from './Vendingmachine';
+import { SnackVendingModal } from './SnackVendingModal';
 import { TrashCan } from './TrashCan';
-import { ExitDoor } from './ExitDoor';
+import { ChangingRoom } from './ChangingRoom';
+import { AvatarCustomizationModal } from './AvatarCustomizationModal';
 import { Poster } from './Poster';
 import { SynthwaveWindow } from './SynthwaveWindow';
 import { PinballMachine } from './PinballMachine';
@@ -142,14 +144,20 @@ const TRASH_X = 80;
 const TRASH_Y = 620;
 
 // Decorative wing props (no hotspots)
-// Door body top sits at EXIT_DOOR_Y; body is 240px tall → bottom = 470 (floor).
-// The EMERGENCY EXIT neon sign sits 28px above the body, near the ceiling.
-const EXIT_DOOR_X = 30;
-const EXIT_DOOR_Y = 230;
+// ChangingRoom replaces the old EXIT door — same anchor point so the floor
+// glow + ceiling lamp positions remain coherent. It IS interactive (opens
+// the AvatarCustomizationModal).
+const CHANGING_ROOM_X = 70;
+const CHANGING_ROOM_Y = 230;
+const CHANGING_ROOM_STAND_Z = 0.55; // it's a floor-front prop
 const POSTER_X = 170;
 const POSTER_Y = 250;
-const WINDOW_X = 1640;
-const WINDOW_Y = 180; // 180–300 on the wall, well above the pinball top
+// Bigger synthwave window — ~480×280 spanning the right wing,
+// bottom edge sits ~10px above the pinball back-glass at y=360.
+const WINDOW_X = 1400;
+const WINDOW_Y = 70;
+const WINDOW_W = 480;
+const WINDOW_H = 280;
 const PINBALL_X = 1700;
 const PINBALL_Y = 360; // top of back-glass at 360, base at 620 (on the floor)
 
@@ -182,6 +190,12 @@ type Hotspot =
       x: number;
       standZ: number;
       maxZ: number;
+    }
+  | {
+      kind: 'changing';
+      x: number;
+      standZ: number;
+      maxZ: number;
     };
 
 /** The composed immersive arcade scene. */
@@ -195,6 +209,8 @@ export function ArcadeRoom({
   const [charX, setCharX] = useState(SCENE_WIDTH / 2);
   const [charZ, setCharZ] = useState(0.7);
   const [flashing, setFlashing] = useState(false);
+  const [changingOpen, setChangingOpen] = useState(false);
+  const [vendingOpen, setVendingOpen] = useState(false);
   const busyRef = useRef(false);
 
   const hotspots = useMemo<Hotspot[]>(
@@ -222,6 +238,12 @@ export function ArcadeRoom({
         standZ: VENDING_STAND_Z,
         maxZ: BACK_WALL_MAX_Z,
       },
+      {
+        kind: 'changing',
+        x: CHANGING_ROOM_X,
+        standZ: CHANGING_ROOM_STAND_Z,
+        maxZ: 0.85,
+      },
     ],
     [cabinets],
   );
@@ -235,7 +257,7 @@ export function ArcadeRoom({
       const dx = Math.abs(h.x - charX);
       if (dx >= PROXIMITY_PX) continue;
       // Z-axis gate: depending on prop type
-      if (h.kind === 'play') {
+      if (h.kind === 'play' || h.kind === 'changing') {
         if (Math.abs(charZ - h.standZ) > 0.32) continue;
       } else {
         if (charZ > h.maxZ) continue;
@@ -265,7 +287,11 @@ export function ArcadeRoom({
       } else if (h.kind === 'play') {
         flashAndGo(() => router.push('/play'));
       } else if (h.kind === 'vending') {
-        flashAndGo(() => router.push('/comms'));
+        // Open the snack vending modal instead of routing away.
+        setVendingOpen(true);
+      } else if (h.kind === 'changing') {
+        // Local modal — no flash, no route change.
+        setChangingOpen(true);
       }
     },
     [router, onCabinetActivate, flashAndGo],
@@ -328,7 +354,7 @@ export function ArcadeRoom({
   // === Background config — lamps spread across the wider room
   const ceilingLamps: CeilingLampCfg[] = useMemo(
     () => [
-      { x: 130, cableLen: 70, color: '#ffb8c2', glow: 'rgba(255,80,100,0.4)' }, // over exit door
+      { x: 130, cableLen: 70, color: '#9be8ff', glow: 'rgba(0,240,255,0.4)' }, // over changing room (cyan)
       { x: 470, cableLen: 60 },
       { x: 770, cableLen: 78 },
       { x: 1070, cableLen: 60 },
@@ -341,7 +367,7 @@ export function ArcadeRoom({
   const floorGlows: FloorGlow[] = useMemo(
     () => [
       // Cabinet color leaks (driven by SECTION_CABINETS positions)
-      { x: 60, rgb: '255,51,68', intensity: 0.32, width: 220 }, // exit door red
+      { x: CHANGING_ROOM_X, rgb: '0,240,255', intensity: 0.32, width: 220 }, // changing room cyan
       ...cabinets.map((c) => {
         const accentRgb: Record<CabinetAccent, string> = {
           pink: '255,44,159',
@@ -357,7 +383,9 @@ export function ArcadeRoom({
       }),
       { x: PLAY_X, rgb: '255,44,159', intensity: 0.25, width: 160 },
       { x: VENDING_X, rgb: '255,230,0', intensity: 0.32 },
-      { x: 1750, rgb: '0,160,255', intensity: 0.3, width: 240 }, // window blue glow
+      // Window blue glow — bigger window now (480px wide centered at ~1640) so
+      // boost the puddle width and intensity to match.
+      { x: 1640, rgb: '0,180,255', intensity: 0.42, width: 380 },
       { x: PINBALL_X + 65, rgb: '255,44,159', intensity: 0.25, width: 170 },
     ],
     [cabinets],
@@ -461,12 +489,29 @@ export function ArcadeRoom({
         <NeonSign text="EXIT →" color="green" size="sm" />
       </div>
 
-      {/* === Left wing — decorative === */}
-      <ExitDoor x={EXIT_DOOR_X} y={EXIT_DOOR_Y} />
+      {/* === Left wing — interactive ChangingRoom + decorative poster === */}
+      <ChangingRoom
+        x={CHANGING_ROOM_X}
+        y={CHANGING_ROOM_Y}
+        active={activeHotspot?.kind === 'changing'}
+        onActivate={() =>
+          handleClickHotspot({
+            kind: 'changing',
+            x: CHANGING_ROOM_X,
+            standZ: CHANGING_ROOM_STAND_Z,
+            maxZ: 0.85,
+          })
+        }
+      />
       <Poster x={POSTER_X} y={POSTER_Y} variant="spaceship" />
 
       {/* === Right wing — decorative === */}
-      <SynthwaveWindow x={WINDOW_X} y={WINDOW_Y} />
+      <SynthwaveWindow
+        x={WINDOW_X}
+        y={WINDOW_Y}
+        width={WINDOW_W}
+        height={WINDOW_H}
+      />
       <PinballMachine x={PINBALL_X} y={PINBALL_Y} />
 
       {/* === Section cabinets (back wall) === */}
@@ -575,6 +620,18 @@ export function ArcadeRoom({
       <HighScoresCard />
       <AchievementsCard />
       <NowPlayingCard />
+
+      {/* === Avatar customization modal — opened by the ChangingRoom prop === */}
+      <AvatarCustomizationModal
+        open={changingOpen}
+        onClose={() => setChangingOpen(false)}
+      />
+
+      {/* === Snack vending modal — opened by the Vendingmachine prop === */}
+      <SnackVendingModal
+        open={vendingOpen}
+        onClose={() => setVendingOpen(false)}
+      />
     </div>
   );
 }

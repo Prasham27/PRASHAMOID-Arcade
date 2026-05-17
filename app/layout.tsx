@@ -4,6 +4,7 @@ import './globals.css';
 import { CRTViewport } from '@/components/effects/CRTViewport';
 import { Scanline } from '@/components/effects/Scanline';
 import { TrackBeacon } from '@/components/effects/TrackBeacon';
+import { EscToArcade } from '@/components/effects/EscToArcade';
 import { KonamiListener } from '@/components/konami/KonamiListener';
 import { AchievementToaster } from '@/components/hud/AchievementToaster';
 import { ArcadeNav } from '@/components/nav/ArcadeNav';
@@ -80,6 +81,7 @@ export default function RootLayout({
         <KonamiListener />
         <AchievementToaster />
         <TrackBeacon />
+        <EscToArcade />
       </body>
     </html>
   );
