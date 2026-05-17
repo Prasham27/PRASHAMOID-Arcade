@@ -41,7 +41,8 @@ export interface PlayerAppearanceState {
 const DEFAULTS = {
   hoodieColor: 'cyan' as HoodieColor,
   hatType: 'none' as HatType,
-  gogglesType: 'none' as GogglesType,
+  // Default to savage 8-bit shades for the cool look (was 'none').
+  gogglesType: 'shades' as GogglesType,
 };
 
 const STORAGE_KEY = 'arcade.appearance';

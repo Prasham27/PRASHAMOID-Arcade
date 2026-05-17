@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sprite } from '@/components/icons/Sprite';
 import { cn } from '@/lib/cn';
-import { usePlayerInventory } from '@/lib/playerInventory';
 import {
   SNACK_ITEMS,
   type SnackItem,
@@ -12,6 +11,11 @@ import {
 export interface SnackVendingModalProps {
   open: boolean;
   onClose: () => void;
+  /** Fired when the visitor picks an item. The parent is responsible for
+   *  walking the character to a visible consume spot before triggering
+   *  the actual inventory consume() — so the eat/drink animation plays
+   *  somewhere the player can see, not buried inside the vending machine. */
+  onPick?: (item: SnackItem) => void;
 }
 
 type TabId = 'energy-drink' | 'soda' | 'snack';
@@ -35,8 +39,11 @@ const TABS: TabCfg[] = [
  * playerInventory store and closes the modal so the character can show
  * the item in-hand.
  */
-export function SnackVendingModal({ open, onClose }: SnackVendingModalProps) {
-  const consume = usePlayerInventory((s) => s.consume);
+export function SnackVendingModal({
+  open,
+  onClose,
+  onPick,
+}: SnackVendingModalProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
 
@@ -74,10 +81,13 @@ export function SnackVendingModal({ open, onClose }: SnackVendingModalProps) {
 
   const handleSelect = useCallback(
     (item: SnackItem) => {
-      consume(item);
+      // Hand off to parent so it can walk the character to a visible spot
+      // BEFORE triggering the consume animation. Parent's onPick is the
+      // single source of truth for inventory side-effects now.
+      onPick?.(item);
       requestClose();
     },
-    [consume, requestClose],
+    [onPick, requestClose],
   );
 
   const hovered = useMemo(

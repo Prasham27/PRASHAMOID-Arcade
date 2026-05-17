@@ -22,6 +22,8 @@ import {
 import { NeonSign } from './NeonSign';
 import { Vendingmachine } from './Vendingmachine';
 import { SnackVendingModal } from './SnackVendingModal';
+import { usePlayerInventory } from '@/lib/playerInventory';
+import type { SnackItem } from '@/lib/snack-items';
 import { TrashCan } from './TrashCan';
 import { ChangingRoom } from './ChangingRoom';
 import { AvatarCustomizationModal } from './AvatarCustomizationModal';
@@ -139,6 +141,11 @@ const PLAY_STAND_Z = 0.55;
 const VENDING_X = 1490;
 const VENDING_Y = 350;
 const VENDING_STAND_Z = 0.18; // it's tall and against the wall
+/** After picking a snack, character walks to this visible spot on the
+ *  floor tiles (in front of the vending machine, off the back wall) so
+ *  the eat/drink animation actually plays where you can see it. */
+const CONSUME_SPOT_X = 1340;
+const CONSUME_SPOT_Z = 0.6;
 
 const TRASH_X = 80;
 const TRASH_Y = 620;
@@ -206,12 +213,28 @@ export function ArcadeRoom({
 }: ArcadeRoomProps) {
   const router = useRouter();
   const charRef = useRef<PixelCharacterHandle>(null);
+  const consumeItem = usePlayerInventory((s) => s.consume);
   const [charX, setCharX] = useState(SCENE_WIDTH / 2);
   const [charZ, setCharZ] = useState(0.7);
   const [flashing, setFlashing] = useState(false);
   const [changingOpen, setChangingOpen] = useState(false);
   const [vendingOpen, setVendingOpen] = useState(false);
   const busyRef = useRef(false);
+
+  /** Modal handed us a chosen snack — walk the character to a visible
+   *  spot on the floor (off the back wall), THEN trigger consume() so the
+   *  eat/drink animation plays where the visitor can see it. */
+  const handlePickSnack = useCallback(
+    async (item: SnackItem) => {
+      try {
+        await charRef.current?.walkTo(CONSUME_SPOT_X, CONSUME_SPOT_Z);
+      } catch {
+        /* interrupted — still consume so the player isn't stuck without feedback */
+      }
+      consumeItem(item);
+    },
+    [consumeItem],
+  );
 
   const hotspots = useMemo<Hotspot[]>(
     () => [
@@ -631,6 +654,7 @@ export function ArcadeRoom({
       <SnackVendingModal
         open={vendingOpen}
         onClose={() => setVendingOpen(false)}
+        onPick={handlePickSnack}
       />
     </div>
   );
